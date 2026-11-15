@@ -399,7 +399,7 @@ def test_safe_status_increments_shelter_exactly_once(client, ctx):
     assert statuses == {"safe"}
 
     state = client.get(f"/api/v1/citizens/{me}").json()
-    assert state == {"citizen_id": me, "status": "safe", "shelter_id": "sh09", "active_sos": []}
+    assert state == {"citizen_id": me, "status": "safe", "shelter_id": "sh09", "active_sos": [], "role": "citizen"}
 
 
 def test_safe_status_moves_between_shelters(client, ctx):
@@ -450,7 +450,7 @@ def test_status_invalid_payload_422(client, payload):
 def test_citizen_state(client):
     me = cid(5)
     assert client.get(f"/api/v1/citizens/{me}").json() == {
-        "citizen_id": me, "status": "unknown", "shelter_id": None, "active_sos": []}
+        "citizen_id": me, "status": "unknown", "shelter_id": None, "active_sos": [], "role": "citizen"}
     sos_id = send_sos(client, me, "flood").json()["sos"]["id"]
     state = client.get(f"/api/v1/citizens/{me}").json()
     assert state["status"] == "sos"

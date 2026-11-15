@@ -45,6 +45,17 @@ async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: s
             alert = res["alert"] or alert
         return {"scenario": name, "district": d["name"], "sos_ids": created, "alert_id": alert["id"] if alert else None}
 
+    if name == "priority_sos":
+        # Hərəkət məhdudiyyətli vətəndaş: profil + SOS -> avtomatik Kritik Prioritet
+        d = ctx.district(district_id) if district_id else None
+        d = d or random.choice(ctx.districts)
+        citizen = f"demo-p-{uuid.uuid4().hex[:12]}"
+        sos_svc.set_profile(ctx, citizen, "priority_citizen")
+        lat = d["lat"] + random.uniform(-0.002, 0.002)
+        lon = d["lon"] + random.uniform(-0.002, 0.002)
+        res = sos_svc.create_sos(ctx, citizen, random.choice(["medical", "collapse", "flood", "fire"]), lat, lon, "Demo")
+        return {"scenario": name, "district": d["name"], "sos_id": res["sos"]["id"], "priority": res["sos"]["priority"]}
+
     if name == "shelter_fill":
         target = shelter_svc.get_shelter(ctx, shelter_id) if shelter_id else None
         if not target:

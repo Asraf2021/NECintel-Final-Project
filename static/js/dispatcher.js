@@ -1,6 +1,6 @@
 /* Modul 2 — Fövqəladə Hallar Dispetçer Paneli və Analitika */
 (function () {
-  const { api, esc, connectStream, fmtDist, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
+  const { nm, api, esc, connectStream, fmtDist, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
     createMap, shelterIcon, toast, t } = window.UCE;
   const $ = (id) => document.getElementById(id);
   const RISK_TAG = { low: "green", medium: "blue", high: "amber", critical: "red" };
@@ -9,6 +9,14 @@
   const state = { token: null, user: null, data: null, filter: "active", conn: "reconnect", stream: null, roadsDrawn: false, fitted: false };
   try { state.token = sessionStorage.getItem("uce_token"); } catch (e) { /* ignore */ }
   let map, layers = {};
+
+  // Rayon adı seçilmiş dildə (zonalar icmaldan gəlir)
+  function zoneName(id, fallback) {
+    const z = state.data && state.data.zones.find((x) => x.district_id === id);
+    return z ? nm(z) : (fallback || id || "");
+  }
+  function brigadeById(id) { return state.data ? state.data.brigades.find((b) => b.id === id) : null; }
+  function shelterById(id) { return state.data ? state.data.shelters.find((x) => x.id === id) : null; }
 
   const can = (perm) => !!state.user && (state.user.permissions.includes("*") || state.user.permissions.includes(perm));
 
@@ -89,6 +97,10 @@
       toast(t("d.alert.headline") + ": " + alertText(data.alert), "error");
     }
     if (name === "reroute_batch" && data.count) toast(t("d.toast.rerouted", { n: data.count }));
+    if (name === "sos_priority" && data.sos) {
+      beep(); setTimeout(beep, 500);
+      toast(t("d.toast.priority", { type: t("sos.type." + data.sos.type), zone: zoneName(data.sos.district_id, data.sos.district_name) }), "error");
+    }
     refreshSoon();
   }
 
@@ -156,7 +168,8 @@
 
     layers.shelters.clearLayers();
     d.shelters.forEach((s) => {
-      const html = "<b>" + esc(s.name) + "</b><br>" + esc(t("type." + s.type)) + " · " + esc(t("d.shelter." + s.status)) +
+      const html = "<b>" + esc(nm(s)) + "</b><br>" + esc(t("type." + s.type)) + " · " + esc(t("d.shelter." + s.status)) +
+        (s.accessible ? " · " + esc(t("legend.accessible")) : "") +
         "<br>" + esc(t("plan.occupancy")) + ": <b>" + s.occupancy_pct + "%</b> (" + fmtNum(s.occupancy) + " / " + fmtNum(s.capacity) + ")";
       L.marker([s.lat, s.lon], { icon: shelterIcon(s, false) }).bindPopup(html).addTo(layers.shelters);
     });
@@ -164,7 +177,7 @@
     layers.brigades.clearLayers();
     d.brigades.forEach((b) => {
       const icon = L.divIcon({ className: "", html: '<div class="mk-brigade is-' + esc(b.status) + '">' + ICON.brigade + "</div>", iconSize: [28, 28], iconAnchor: [14, 14] });
-      L.marker([b.lat, b.lon], { icon, zIndexOffset: 300 }).bindTooltip(esc(b.name) + " · " + esc(t("d.brigade." + b.status))).addTo(layers.brigades);
+      L.marker([b.lat, b.lon], { icon, zIndexOffset: 300 }).bindTooltip(esc(nm(b)) + " · " + esc(t("d.brigade." + b.status))).addTo(layers.brigades);
       if (b.target_lat != null && b.status !== "available") {
         L.polyline([[b.lat, b.lon], [b.target_lat, b.target_lon]], { color: "#F2A20C", weight: 2, dashArray: "4 6", interactive: false }).addTo(layers.brigades);
       }
@@ -172,9 +185,11 @@
 
     layers.sos.clearLayers();
     d.sos.filter((s) => s.status === "active" || s.status === "assigned").forEach((s) => {
-      const icon = L.divIcon({ className: "", html: '<div class="mk-sos' + (s.status === "assigned" ? " is-assigned" : "") + '">' + ICON[s.type] + "</div>", iconSize: [30, 30], iconAnchor: [15, 15] });
-      L.marker([s.lat, s.lon], { icon, zIndexOffset: 800 })
-        .bindPopup("<b>SOS #" + s.id + " · " + esc(t("sos.type." + s.type)) + "</b><br>" + esc(s.district_name) + " · " + esc(timeAgo(s.created_at)) +
+      const prio = s.priority === 1;
+      const icon = L.divIcon({ className: "", html: '<div class="mk-sos' + (s.status === "assigned" ? " is-assigned" : "") + (prio ? " is-priority" : "") + '">' +
+        (prio ? ICON.wheelchair : ICON[s.type]) + "</div>", iconSize: [30, 30], iconAnchor: [15, 15] });
+      L.marker([s.lat, s.lon], { icon, zIndexOffset: prio ? 900 : 800 })
+        .bindPopup((prio ? '<span class="tag violet">' + esc(t("d.sos.priority")) + "</span><br>" : "") + "<b>SOS #" + s.id + " · " + esc(t("sos.type." + s.type)) + "</b><br>" + esc(zoneName(s.district_id, s.district_name)) + " · " + esc(timeAgo(s.created_at)) +
           (s.note ? "<br>" + esc(s.note) : "")).addTo(layers.sos);
     });
 
@@ -194,9 +209,9 @@
 
   function alertText(a) {
     const det = a.details || {};
-    if (a.kind === "shelter_overflow") return t("d.alert.overflow", { name: det.shelter_name || "", pct: det.occupancy_pct });
+    if (a.kind === "shelter_overflow") return t("d.alert.overflow", { name: nm({ name: det.shelter_name, name_en: det.shelter_name_en }), pct: det.occupancy_pct });
     const n = det.trigger === "radius" ? det.radius_count : det.zone_count;
-    return t(det.trigger === "radius" ? "d.alert.cluster_radius" : "d.alert.cluster", { zone: a.district_name, n });
+    return t(det.trigger === "radius" ? "d.alert.cluster_radius" : "d.alert.cluster", { zone: zoneName(a.district_id, a.district_name), n });
   }
 
   function renderAlertStrip() {
@@ -222,6 +237,7 @@
     const occBar = '<div class="bar" style="--c:' + occColor + '"><i style="width:' + Math.min(100, k.occupancy_pct) + '%"></i></div>';
     $("kpis").innerHTML =
       kpi(ICON.signal, t("d.kpi.sos"), k.sos_active, t("d.kpi.sos_sub", { n: k.sos_window }), k.sos_active ? "#FF5A5F" : null) +
+      kpi(ICON.wheelchair, t("d.kpi.priority"), k.sos_priority, t("d.kpi.priority_sub"), k.sos_priority ? "#C9B3FF" : null, k.sos_priority > 0) +
       kpi(ICON.alert, t("d.kpi.alerts"), k.alerts_pending, t("d.kpi.alerts_sub"), k.alerts_pending ? "#FF5A5F" : null, k.alerts_pending > 0) +
       kpi(ICON.users, t("d.kpi.occupancy"), k.occupancy_pct + "%", t("d.kpi.occupancy_sub", { occ: fmtNum(k.total_occupancy), cap: fmtNum(k.total_capacity) }), occColor, false, occBar) +
       kpi(ICON.shelter, t("d.kpi.shelters"), k.shelters_open, t("d.kpi.shelters_sub", { full: k.shelters_full, res: k.shelters_reserve }), "#9EC0FF") +
@@ -235,10 +251,11 @@
     if (state.filter === "active") list = list.filter((s) => s.status === "active" || s.status === "assigned");
     if (!list.length) { $("sosList").innerHTML = '<div class="d-empty">' + esc(t("d.sos.empty")) + "</div>"; return; }
     const manage = can("sos:manage");
-    const brigades = Object.fromEntries(state.data.brigades.map((b) => [b.id, b.name]));
+    const brigades = Object.fromEntries(state.data.brigades.map((b) => [b.id, nm(b)]));
     $("sosList").innerHTML = list.slice(0, 80).map((s) => {
       const done = s.status === "resolved" || s.status === "safe";
-      const cls = done ? "is-done" : "is-" + s.status;
+      const prio = s.priority === 1;
+      const cls = (done ? "is-done" : "is-" + s.status) + (prio && !done ? " is-priority" : "");
       const tag = s.status === "active" ? "red" : s.status === "assigned" ? "amber" : "green";
       let btns = "";
       if (manage && !done) {
@@ -246,8 +263,9 @@
           '<button class="btn-xs" type="button" data-resolve="' + s.id + '">' + esc(t("d.sos.resolve")) + "</button></div>";
       }
       const brig = s.brigade_id && brigades[s.brigade_id] ? " · " + esc(brigades[s.brigade_id]) : "";
-      return '<div class="sos-item ' + cls + '"><span class="sos-ico">' + ICON[s.type] + '</span><div><div class="sos-row"><span class="sos-type">#' + s.id + " " +
-        esc(t("sos.type." + s.type)) + '</span><span class="sos-time">' + esc(timeAgo(s.created_at)) + '</span></div><div class="sos-meta">' + esc(s.district_name) +
+      const prioRow = prio ? '<div class="sos-prio"><span class="tag violet">' + ICON.wheelchair + " " + esc(t("d.sos.priority")) + '</span><span class="tag">' + esc(t("d.sos.role." + s.citizen_role)) + "</span></div>" : "";
+      return '<div class="sos-item ' + cls + '"><span class="sos-ico">' + (prio ? ICON.wheelchair : ICON[s.type]) + '</span><div>' + prioRow + '<div class="sos-row"><span class="sos-type">#' + s.id + " " +
+        esc(t("sos.type." + s.type)) + '</span><span class="sos-time">' + esc(timeAgo(s.created_at)) + '</span></div><div class="sos-meta">' + esc(zoneName(s.district_id, s.district_name)) +
         ' · <span class="tag ' + tag + '">' + esc(t("d.sos.status." + s.status)) + "</span>" + brig + "</div>" +
         (s.note ? '<div class="sos-note">' + esc(s.note) + "</div>" : "") + btns + "</div></div>";
     }).join("");
@@ -267,9 +285,9 @@
       } else if (a.status === "confirmed") {
         const ac = a.actions || {};
         body = '<ul class="al-acts">' +
-          (ac.brigade ? "<li>" + ICON.brigade + "<span>" + esc(t("d.alert.done_brigade", { name: ac.brigade.name, dist: fmtDist(ac.brigade.distance_m) })) + "</span></li>"
+          (ac.brigade ? "<li>" + ICON.brigade + "<span>" + esc(t("d.alert.done_brigade", { name: nm(ac.brigade), dist: fmtDist(ac.brigade.distance_m) })) + "</span></li>"
             : '<li class="warn">' + ICON.alert + "<span>" + esc(t("d.alert.no_brigade")) + "</span></li>") +
-          (ac.new_shelter ? "<li>" + ICON.shelter + "<span>" + esc(t("d.alert.done_shelter", { name: ac.new_shelter.name, cap: fmtNum(ac.new_shelter.capacity) })) + "</span></li>"
+          (ac.new_shelter ? "<li>" + ICON.shelter + "<span>" + esc(t("d.alert.done_shelter", { name: nm(ac.new_shelter), cap: fmtNum(ac.new_shelter.capacity) })) + "</span></li>"
             : '<li class="warn">' + ICON.alert + "<span>" + esc(t("d.alert.no_shelter")) + "</span></li>") + "</ul>";
       }
       const foot = a.decided_by ? '<div class="al-foot">' + esc(t("d.alert.by", { user: a.decided_by })) + " · " + esc(timeAgo(a.decided_at)) + "</div>" : "";
@@ -284,8 +302,9 @@
       let btn = "";
       if (manage && b.status === "dispatched") btn = '<button class="btn-xs" type="button" data-brigade="' + esc(b.id) + '" data-bstatus="on_scene">' + esc(t("d.brigade.arrive")) + "</button>";
       else if (manage && b.status !== "available") btn = '<button class="btn-xs" type="button" data-brigade="' + esc(b.id) + '" data-bstatus="available">' + esc(t("d.brigade.free")) + "</button>";
-      return '<div class="br-item"><span class="br-ico">' + ICON.brigade + '</span><div><div class="br-name">' + esc(b.name) + '</div><div class="br-sub">' +
-        esc(t("d.brigade.type." + b.type)) + " · " + esc(b.district_name) + '</div></div><div class="br-right"><span class="tag ' + (BRIGADE_TAG[b.status] || "") + '">' +
+      return '<div class="br-item"><span class="br-ico">' + ICON.brigade + '</span><div><div class="br-name">' + esc(nm(b)) +
+        (b.accessible_transport ? ' <span class="acc-mini" title="' + esc(t("d.brigade.accessible")) + '">' + ICON.wheelchair + "</span>" : "") + '</div><div class="br-sub">' +
+        esc(t("d.brigade.type." + b.type)) + " · " + esc(zoneName(b.district_id, b.district_name)) + '</div></div><div class="br-right"><span class="tag ' + (BRIGADE_TAG[b.status] || "") + '">' +
         esc(t("d.brigade." + b.status)) + "</span>" + btn + "</div></div>";
     }).join("");
   }
@@ -295,10 +314,11 @@
   function renderZones() {
     const zones = state.data.zones.slice().sort((a, b) => ["critical", "high", "medium", "low"].indexOf(a.risk) - ["critical", "high", "medium", "low"].indexOf(b.risk) || b.sos_active - a.sos_active);
     $("zoneTable").innerHTML = '<table class="d-table"><thead><tr><th>' + esc(t("d.zones.zone")) + '</th><th class="r">' + esc(t("d.zones.sos")) + '</th><th class="r">' +
-      esc(t("d.zones.sos5")) + "</th><th>" + esc(t("d.zones.occ")) + '</th><th class="r">' + esc(t("d.zones.brig")) + "</th><th>" + esc(t("d.zones.risk")) + "</th></tr></thead><tbody>" +
+      esc(t("d.zones.sos5")) + '</th><th class="r">' + esc(t("d.zones.prio")) + "</th><th>" + esc(t("d.zones.occ")) + '</th><th class="r">' + esc(t("d.zones.brig")) + "</th><th>" + esc(t("d.zones.risk")) + "</th></tr></thead><tbody>" +
       zones.map((z) => {
         const c = z.occupancy_pct >= 90 ? LEVEL_COLOR.full : z.occupancy_pct >= 70 ? LEVEL_COLOR.high : z.occupancy_pct >= 40 ? LEVEL_COLOR.medium : LEVEL_COLOR.low;
-        return '<tr><td class="nm">' + esc(z.name) + '</td><td class="r">' + z.sos_active + '</td><td class="r">' + z.sos_window + '</td><td><div class="occ-cell">' + bar(z.occupancy_pct, c) +
+        return '<tr><td class="nm">' + esc(nm(z)) + '</td><td class="r">' + z.sos_active + '</td><td class="r">' + z.sos_window + '</td><td class="r">' +
+          (z.sos_priority ? '<span class="tag violet">' + z.sos_priority + "</span>" : "0") + '</td><td><div class="occ-cell">' + bar(z.occupancy_pct, c) +
           "<b>" + Math.round(z.occupancy_pct) + '%</b></div></td><td class="r">' + z.brigades_available + '</td><td><span class="tag ' + RISK_TAG[z.risk] + '">' + esc(t("d.risk." + z.risk)) + "</span></td></tr>";
       }).join("") + "</tbody></table>";
   }
@@ -316,7 +336,8 @@
             : '<button class="btn-xs" type="button" data-sstatus="' + esc(s.id) + '" data-v="open">' + esc(t("d.shelter.open_btn")) + "</button>";
         }
         const tag = s.status === "open" ? (s.accepting ? "green" : "red") : "";
-        return '<tr><td><div class="nm">' + esc(s.name) + '</div><div class="sub">' + esc(t("type." + s.type)) + " · " + fmtNum(s.occupancy) + " / " + fmtNum(s.capacity) +
+        return '<tr><td><div class="nm">' + esc(nm(s)) + (s.accessible ? ' <span class="acc-mini" title="' + esc(t("legend.accessible")) + '">' + ICON.wheelchair + "</span>" : "") +
+          '</div><div class="sub">' + esc(t("type." + s.type)) + " · " + fmtNum(s.occupancy) + " / " + fmtNum(s.capacity) +
           '</div></td><td><div class="occ-cell">' + bar(s.occupancy_pct, levelColor(s)) + "<b>" + Math.round(s.occupancy_pct) + '%</b></div></td><td><span class="tag ' + tag + '">' +
           esc(s.status === "open" && !s.accepting ? t("plan.full") : t("d.shelter." + s.status)) + "</span></td><td>" + ctl + "</td></tr>";
       }).join("") + "</tbody></table>";
@@ -354,7 +375,7 @@
   }
 
   function renderSimMenu() {
-    const items = ["sos_cluster", "shelter_fill", "crowd", "-", "road_close", "road_open_all", "-", "api_outage", "api_restore", "-", "reset"];
+    const items = ["sos_cluster", "priority_sos", "shelter_fill", "crowd", "-", "road_close", "road_open_all", "-", "api_outage", "api_restore", "-", "reset"];
     $("simList").innerHTML = items.map((n) => n === "-" ? "<hr>" : '<button type="button" data-sim="' + n + '">' + esc(t("d.sim." + n)) + "</button>").join("");
   }
 
@@ -403,7 +424,7 @@
       else if (ds.assign) {
         el.disabled = true;
         const res = await action(() => call("/dispatch/sos/" + ds.assign + "/assign", { method: "POST", body: {} }));
-        if (res) toast(t("sos.assigned", { name: res.brigade_name }) + " · " + fmtDist(res.brigade_distance_m), "success");
+        if (res) toast(t("sos.assigned", { name: nm(brigadeById(res.brigade_id)) || res.brigade_name }) + " · " + fmtDist(res.brigade_distance_m), "success");
       } else if (ds.resolve) action(() => call("/dispatch/sos/" + ds.resolve + "/resolve", { method: "POST" }));
       else if (ds.brigade) action(() => call("/dispatch/brigades/" + ds.brigade, { method: "PATCH", body: { status: ds.bstatus } }));
       else if (ds.occ) {

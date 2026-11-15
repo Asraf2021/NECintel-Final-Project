@@ -137,3 +137,41 @@
   .sheet { border-radius: 22px; padding-bottom: 18px; }
   .sheet-grip { display: none; }
 }
+
+/* ----- Challenge Drop 1: Hərəkət məhdudiyyətli / xüsusi qayğı rejimi ----- */
+.role-toggle {
+  margin-top: 12px; display: grid; grid-template-columns: 40px 1fr auto; gap: 10px; align-items: center; cursor: pointer;
+  padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: #FAFBFC;
+}
+.role-toggle:hover { border-color: #B9C4D2; }
+.role-ico { width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center; font-size: 24px; background: #EDE7FB; color: #6D28D9; }
+.role-text b { display: block; font-size: 14px; line-height: 1.25; }
+.role-text small { display: block; font-size: 12px; color: var(--ink-2); margin-top: 2px; line-height: 1.35; }
+.switch { appearance: none; -webkit-appearance: none; width: 46px; height: 28px; border-radius: 999px; background: #CBD3DD; position: relative; cursor: pointer; transition: background .2s ease; flex: none; margin: 0; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .3); transition: transform .2s ease; }
+.switch:checked { background: #7C3AED; }
+.switch:checked::after { transform: translateX(18px); }
+.is-priority .role-toggle { border-color: #7C3AED; background: #F6F2FF; box-shadow: 0 0 0 3px rgba(124, 58, 237, .15); }
+.is-priority .role-ico { background: #7C3AED; color: #fff; }
+
+.act-badge {
+  position: absolute; top: -4px; right: -4px; background: #7C3AED; color: #fff; font-size: 12px; font-weight: 800; letter-spacing: .02em;
+  padding: 3px 7px; border-radius: 999px; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .25);
+}
+.act-badge[hidden] { display: none; }
+.sheet-priority {
+  display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; background: #F6F2FF; border: 1px solid #D9C9FB;
+  color: #4C1D95; border-radius: 12px; padding: 10px 12px; font-size: 13px;
+}
+.sheet-priority[hidden] { display: none; }
+.sheet-priority > span:first-child { font-size: 26px; display: inline-flex; }
+.acc-badge {
+  display: flex; align-items: center; gap: 8px; margin: -2px 0 12px; padding: 7px 10px; border-radius: 9px;
+  background: #F6F2FF; color: #5B21B6; font-weight: 700; font-size: 13px;
+}
+.acc-badge svg { font-size: 18px; flex: none; }
+.acc-dot { display: inline-flex; vertical-align: -2px; color: #6D28D9; font-size: 14px; }
+.note.note-acc { background: #F6F2FF; color: #4C1D95; }
+.status-card .st-priority { background: rgba(255, 255, 255, .26); font-weight: 800; }
+.status-card .st-priority svg { font-size: 18px; }
+.c-legend i.bn { width: 16px; height: 0; border-radius: 0; border-top: 4px dotted #F2A20C; }

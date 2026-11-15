@@ -48,12 +48,26 @@ CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, actor TEXT NOT NULL, role TEXT NOT NULL,
     action TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS citizen_profiles (
+    citizen_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'citizen', needs TEXT NOT NULL DEFAULT '[]', updated_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS users (
     username TEXT PRIMARY KEY, password_hash TEXT NOT NULL, role TEXT NOT NULL, display_name TEXT NOT NULL
 );
 """
 
-DATA_TABLES = ["sos_signals", "citizen_status", "evacuation_plans", "alerts", "road_closures", "shelters", "brigades"]
+# Mövcud bazalar üçün sxem miqrasiyası: (cədvəl, sütun, tərif). Yeni sütun = bir sətir.
+MIGRATIONS = [
+    ("sos_signals", "priority", "INTEGER NOT NULL DEFAULT 2"),
+    ("sos_signals", "citizen_role", "TEXT NOT NULL DEFAULT 'citizen'"),
+    ("evacuation_plans", "profile", "TEXT NOT NULL DEFAULT 'foot'"),
+    ("shelters", "name_en", "TEXT NOT NULL DEFAULT ''"),
+    ("shelters", "accessible", "INTEGER NOT NULL DEFAULT 1"),
+    ("brigades", "name_en", "TEXT NOT NULL DEFAULT ''"),
+    ("brigades", "accessible_transport", "INTEGER NOT NULL DEFAULT 0"),
+]
+
+DATA_TABLES = ["citizen_profiles", "sos_signals", "citizen_status", "evacuation_plans", "alerts", "road_closures", "shelters", "brigades"]
 
 
 class Database:
@@ -70,6 +84,14 @@ class Database:
             self._conn.execute("PRAGMA journal_mode=WAL")
             self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.executescript(SCHEMA)
+        self._migrate()
+
+    def _migrate(self) -> None:
+        for table, column, ddl in MIGRATIONS:
+            cols = {r[1] for r in self._conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if column not in cols:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sos_priority ON sos_signals(priority)")
 
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -132,6 +154,13 @@ class Database:
                         "INSERT INTO brigades (id,name,type,district_id,lat,lon,status,updated_at) VALUES (?,?,?,?,?,?,?,?)",
                         (b["id"], b["name"], b["type"], b["district_id"], b["lat"], b["lon"], b["status"], now),
                     )
+            # Statik atributlar (ad tərcüməsi, əlçatanlıq) həmişə məlumat faylı ilə sinxronlaşdırılır
+            for s in city["shelters"]:
+                self._conn.execute("UPDATE shelters SET name_en=?, accessible=? WHERE id=?",
+                                   (s.get("name_en", ""), 1 if s.get("accessible", True) else 0, s["id"]))
+            for b in city["brigades"]:
+                self._conn.execute("UPDATE brigades SET name_en=?, accessible_transport=? WHERE id=?",
+                                   (b.get("name_en", ""), 1 if b.get("accessible_transport") else 0, b["id"]))
             for u in users:
                 self._conn.execute(
                     "INSERT INTO users (username,password_hash,role,display_name) VALUES (?,?,?,?)"

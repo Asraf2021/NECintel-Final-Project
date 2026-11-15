@@ -59,7 +59,12 @@ class RoadCloseRequest(BaseModel):
 
 
 class ScenarioRequest(BaseModel):
-    name: Literal["sos_cluster", "shelter_fill", "road_close", "road_open_all", "api_outage", "api_restore", "crowd", "reset"]
+    name: Literal["sos_cluster", "priority_sos", "shelter_fill", "road_close", "road_open_all", "api_outage", "api_restore", "crowd", "reset"]
     district_id: Optional[str] = Field(default=None, max_length=32)
     shelter_id: Optional[str] = Field(default=None, max_length=16)
     edge_id: Optional[str] = Field(default=None, max_length=16)
+
+
+class ProfileUpdate(BaseModel):
+    """Vətəndaş rolu (Challenge Drop 1). Rollar reyestri: app/core/roles.py."""
+    role: Literal["citizen", "priority_citizen"]

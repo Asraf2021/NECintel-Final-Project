@@ -43,7 +43,7 @@
       es.onopen = () => onState && onState("live");
       es.onerror = () => onState && onState(es.readyState === 2 ? "offline" : "reconnect");
       const names = ["hello", "shelter_update", "road_update", "reroute", "routing_status", "sos_new", "sos_update",
-        "sos_assigned", "sos_resolved", "alert_new", "alert_update", "brigade_update", "citizen_status",
+        "sos_assigned", "sos_resolved", "sos_priority", "alert_new", "alert_update", "brigade_update", "citizen_status",
         "reroute_batch", "reset", "broadcast"];
       names.forEach((name) => es.addEventListener(name, (ev) => {
         let payload = {};
@@ -101,6 +101,7 @@
     signal: svg('<path d="M5 19a10 10 0 0 1 0-14"/><path d="M19 5a10 10 0 0 1 0 14"/><path d="M8.500 15.500a5 5 0 0 1 0-7"/><path d="M15.500 8.500a5 5 0 0 1 0 7"/><circle cx="12" cy="12" r="1.300" fill="currentColor"/>'),
     play: svg('<path d="M7 4.500v15l12-7.500-12-7.500z"/>'),
     logout: svg('<path d="M10 4H5v16h5"/><path d="M14 8l4 4-4 4"/><path d="M18 12H9"/>'),
+    wheelchair: svg('<circle cx="11" cy="4" r="1.800"/><path d="M11 7v6h5l2.500 5"/><path d="M11 10h4.500"/><path d="M8.200 10.300A5.500 5.500 0 1 0 15.300 18"/>'),
     home: svg('<path d="M3 11.500l9-7.500 9 7.500"/><path d="M6 10v10h12V10"/>'),
   };
   const TYPE_ICON = { shelter: "shelter", park: "park", stadium: "stadium" };
@@ -129,6 +130,12 @@
     });
   }
 
+  // Məlumatın (məntəqə, briqada, rayon adı) seçilmiş dildə adı: name_en varsa ingilis dilində göstərilir
+  function nm(obj) {
+    if (!obj) return "";
+    return window.I18N.lang === "en" && obj.name_en ? obj.name_en : obj.name;
+  }
+
   function toast(message, kind) {
     let box = document.getElementById("toasts");
     if (!box) {
@@ -145,6 +152,6 @@
     setTimeout(() => { el.classList.add("is-out"); setTimeout(() => el.remove(), 300); }, 4200);
   }
 
-  window.UCE = { api, esc, connectStream, fmtDist, fmtMin, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR,
+  window.UCE = { nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR,
     ICON, TYPE_ICON, createMap, shelterIcon, toast, t };
 })();

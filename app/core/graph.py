@@ -24,6 +24,15 @@ class Edge:
     b: str
     name: str
     length_m: float
+    accessible: bool = True      # əlil arabası / tibbi nəqliyyat üçün keçilə bilən (pandus, maneəsiz)
+    barrier: str | None = None   # stairs | underpass | steep | no_sidewalk
+
+
+# Marşrut profilləri. Yeni profil = bir sətir (məs. "stretcher", "elderly").
+PROFILES = {
+    "foot": {"accessible_only": False},
+    "wheelchair": {"accessible_only": True},
+}
 
 
 @dataclass
@@ -54,7 +63,8 @@ class RoadGraph:
         for e in edges:
             a, b = self.nodes[e["a"]], self.nodes[e["b"]]
             length = haversine_m(a["lat"], a["lon"], b["lat"], b["lon"]) * ROAD_FACTOR
-            self.edges[e["id"]] = Edge(e["id"], e["a"], e["b"], e["name"], length)
+            self.edges[e["id"]] = Edge(e["id"], e["a"], e["b"], e["name"], length,
+                                       e.get("accessible", True), e.get("barrier"))
             self.adj[e["a"]].append((e["b"], e["id"]))
             self.adj[e["b"]].append((e["a"], e["id"]))
 
@@ -78,6 +88,7 @@ class RoadGraph:
         closed: Iterable[str] = (),
         congestion: dict[str, float] | None = None,
         speed_kmh: float = 4.5,
+        profile: str = "foot",
     ) -> RouteResult:
         """Başlanğıc koordinatdan təyinat koordinatına ən sürətli marşrut.
 
@@ -85,6 +96,9 @@ class RoadGraph:
         congestion — edge_id -> əmsal (1.0 = sərbəst, 2.0 = iki dəfə yavaş).
         """
         closed_set = set(closed)
+        if PROFILES.get(profile, PROFILES["foot"])["accessible_only"]:
+            # Əlçatan profil: pilləkən, yeraltı keçid, dik yoxuş və səkisiz yollar marşrutdan çıxarılır
+            closed_set |= {eid for eid, e in self.edges.items() if not e.accessible}
         congestion = congestion or {}
         speed_m_min = speed_kmh * 1000 / 60
 

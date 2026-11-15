@@ -43,7 +43,7 @@
 .d-main[hidden] { display: none; }
 
 /* KPI */
-.d-kpis { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 12px; }
+.d-kpis { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px; }
 .kpi { background: var(--d-panel); border: 1px solid var(--d-line); border-radius: 14px; padding: 12px 14px; min-width: 0; }
 .kpi-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--d-mut); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .kpi-top svg { font-size: 18px; color: var(--k, var(--d-mut)); flex: none; }
@@ -186,3 +186,13 @@
   .alert-banner .a-btns { justify-content: stretch; }
   .d-title { display: none; }
 }
+
+/* ----- Challenge Drop 1: Kritik Prioritet SOS ----- */
+.sos-item.is-priority { border-left: 3px solid #A78BFA; background: #241A3D; box-shadow: 0 0 0 1px #5B3FA8 inset; }
+.sos-item.is-priority .sos-ico { background: #7C3AED; color: #fff; }
+.sos-prio { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+.sos-prio .tag svg, .tag svg { font-size: 13px; margin-right: 2px; }
+.mk-sos.is-priority { background: #7C3AED; width: 34px; height: 34px; font-size: 19px; box-shadow: 0 0 0 0 rgba(124, 58, 237, .8); animation: pulse-prio 1.1s infinite; }
+@keyframes pulse-prio { 70% { box-shadow: 0 0 0 18px rgba(124, 58, 237, 0); } 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); } }
+.kpi.is-alarm[style*="C9B3FF"] { border-color: #7C3AED; background: #1F1636; }
+.acc-mini { display: inline-flex; vertical-align: -2px; color: #C9B3FF; font-size: 14px; }

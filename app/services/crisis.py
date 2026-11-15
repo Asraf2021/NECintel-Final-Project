@@ -106,7 +106,8 @@ def evaluate_shelter(ctx: AppContext, shelter: dict) -> dict | None:
         return None
     details = {"trigger": "occupancy", "occupancy_pct": shelter["occupancy_pct"],
                "occupancy": shelter["occupancy"], "capacity": shelter["capacity"],
-               "shelter_name": shelter["name"], "threshold_pct": settings.shelter_critical_pct}
+               "shelter_name": shelter["name"], "shelter_name_en": shelter.get("name_en", ""),
+               "threshold_pct": settings.shelter_critical_pct}
     with ctx.db.transaction():
         pending = ctx.db.one(
             "SELECT * FROM alerts WHERE kind='shelter_overflow' AND shelter_id=? AND status='pending'", (shelter["id"],))
@@ -127,12 +128,17 @@ def evaluate_shelter(ctx: AppContext, shelter: dict) -> dict | None:
     return alert
 
 
-def nearest_available_brigade(ctx: AppContext, lat: float, lon: float, preferred_type: str | None = None) -> dict | None:
+def nearest_available_brigade(ctx: AppContext, lat: float, lon: float, preferred_type: str | None = None,
+                              requirement: str | None = None) -> dict | None:
+    """Ən yaxın boş briqada. requirement="accessible_transport" — əlil arabası/tibbi nəqliyyatı olanlar üstündür."""
     available = ctx.db.query("SELECT * FROM brigades WHERE status='available'")
     if not available:
         return None
-    preferred = [b for b in available if b["type"] == preferred_type]
-    pool = preferred or available
+    pool = available
+    if requirement == "accessible_transport":
+        pool = [b for b in available if b["accessible_transport"]] or available
+    preferred = [b for b in pool if b["type"] == preferred_type]
+    pool = preferred or pool
     return min(pool, key=lambda b: haversine_m(lat, lon, b["lat"], b["lon"]))
 
 
@@ -154,7 +160,7 @@ def confirm_alert(ctx: AppContext, alert_id: int, actor: dict) -> dict | None:
             ctx.db.execute(
                 "UPDATE brigades SET status='dispatched', target_lat=?, target_lon=?, assigned_alert_id=?, updated_at=? WHERE id=?",
                 (lat, lon, alert_id, time.time(), brigade["id"]))
-            actions["brigade"] = {"id": brigade["id"], "name": brigade["name"], "type": brigade["type"],
+            actions["brigade"] = {"id": brigade["id"], "name": brigade["name"], "name_en": brigade["name_en"], "type": brigade["type"],
                                   "distance_m": round(haversine_m(lat, lon, brigade["lat"], brigade["lon"]))}
             sos_ids = details.get("sos_ids") or []
             if sos_ids:
@@ -168,7 +174,7 @@ def confirm_alert(ctx: AppContext, alert_id: int, actor: dict) -> dict | None:
             new = min(reserves, key=lambda s: haversine_m(lat, lon, s["lat"], s["lon"]))
             ctx.db.execute("UPDATE shelters SET status='open', updated_at=? WHERE id=?", (time.time(), new["id"]))
             opened_shelter = new["id"]
-            actions["new_shelter"] = {"id": new["id"], "name": new["name"], "capacity": new["capacity"],
+            actions["new_shelter"] = {"id": new["id"], "name": new["name"], "name_en": new["name_en"], "capacity": new["capacity"],
                                       "distance_m": round(haversine_m(lat, lon, new["lat"], new["lon"]))}
 
         ctx.db.execute("UPDATE alerts SET status='confirmed', actions=?, decided_at=?, decided_by=? WHERE id=?",

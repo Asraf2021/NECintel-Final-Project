@@ -37,6 +37,7 @@ class Settings:
     alert_cooldown_s = int(_env("UCE_ALERT_COOLDOWN_S", "300"))
     nearest_shelters_limit = int(_env("UCE_NEAREST_LIMIT", "5"))
     walking_speed_kmh = float(_env("UCE_WALK_SPEED_KMH", "4.5"))
+    wheelchair_speed_kmh = float(_env("UCE_WHEELCHAIR_SPEED_KMH", "3.0"))
 
     # --- Xarici Xəritə və Marşrutlaşdırma API-si ---
     # Boşdursa: simulyasiya olunmuş API eyni prosesdə (in-process ASGI) çağırılır.

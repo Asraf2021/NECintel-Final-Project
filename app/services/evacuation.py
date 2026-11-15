@@ -7,18 +7,27 @@ import time
 from ..config import settings
 from ..context import AppContext
 from ..core.geo import haversine_m
+from ..core.roles import citizen_role, role_policy
 from . import shelters as shelter_svc
 
 CANDIDATES = 8  # marşrutu hesablanan ən yaxın məntəqə sayı
 
 
-async def build_plan(ctx: AppContext, lat: float, lon: float, citizen_id: str | None = None) -> dict:
+async def build_plan(ctx: AppContext, lat: float, lon: float, citizen_id: str | None = None,
+                     role: str | None = None) -> dict:
     """Vətəndaş üçün təxliyə planı qurur.
 
     Tövsiyə qaydası: doluluğu 90%-dən az olan və marşrutu mövcud olan məntəqələr arasında
     ən qısa piyada müddəti. Ən yaxın məntəqə dolu (>=90%) və ya yolu bağlıdırsa — alternativ.
+    Rol siyasəti (app/core/roles.py): "priority_citizen" üçün yalnız əlçatan məntəqələr və
+    yalnız əlçatan (panduslu, maneəsiz) yol seqmentləri ilə marşrut.
     """
+    role = role or citizen_role(ctx.db, citizen_id)
+    policy = role_policy(role)
+    profile = policy["route_profile"]
     open_shelters = shelter_svc.list_shelters(ctx)
+    if policy["accessible_shelters_only"]:
+        open_shelters = [s for s in open_shelters if s["accessible"]]
     for s in open_shelters:
         s["distance_m"] = round(haversine_m(lat, lon, s["lat"], s["lon"]))
     open_shelters.sort(key=lambda s: s["distance_m"])
@@ -28,7 +37,7 @@ async def build_plan(ctx: AppContext, lat: float, lon: float, citizen_id: str | 
     if candidates and not any(s["accepting"] for s in candidates):
         candidates += [s for s in open_shelters[CANDIDATES:] if s["accepting"]][:4]
 
-    routes, source = await ctx.routing.routes((lat, lon), [(s["lat"], s["lon"]) for s in candidates])
+    routes, source = await ctx.routing.routes((lat, lon), [(s["lat"], s["lon"]) for s in candidates], profile)
     for s, r in zip(candidates, routes):
         s["route"] = r if r.get("found") else None
 
@@ -65,19 +74,24 @@ async def build_plan(ctx: AppContext, lat: float, lon: float, citizen_id: str | 
         "rerouted": False,
         "reroute_reason": None,
         "routing": {"source": source, "degraded": source != "external"},
+        "role": role,
+        "profile": profile,
+        "sos_priority": policy["sos_priority"],
         "closed_roads": len(ctx.routing.closed_edges),
         "generated_at": time.time(),
     }
     if recommended:
         plan["recommended"] = {"shelter_id": recommended["id"], "name": recommended["name"],
+                               "name_en": recommended.get("name_en", ""), "accessible": recommended["accessible"],
                                "route": recommended["route"], "reason": reason, "skipped": skipped}
 
     if citizen_id and recommended:
-        _compare_and_store(ctx, citizen_id, lat, lon, recommended, plan)
+        _compare_and_store(ctx, citizen_id, lat, lon, recommended, plan, profile)
     return plan
 
 
-def _compare_and_store(ctx: AppContext, citizen_id: str, lat: float, lon: float, recommended: dict, plan: dict) -> None:
+def _compare_and_store(ctx: AppContext, citizen_id: str, lat: float, lon: float, recommended: dict, plan: dict,
+                       profile: str = "foot") -> None:
     """Əvvəlki planla müqayisə edir: dəyişiklik varsa səbəbini qeyd edir, yeni planı saxlayır."""
     prev = ctx.db.one("SELECT * FROM evacuation_plans WHERE citizen_id=?", (citizen_id,))
     new_edges = recommended["route"]["edge_ids"]
@@ -90,12 +104,14 @@ def _compare_and_store(ctx: AppContext, citizen_id: str, lat: float, lon: float,
             old = shelter_svc.get_shelter(ctx, prev["shelter_id"])
             if old and not old["accepting"]:
                 plan["rerouted"], plan["reroute_reason"] = True, "shelter_full"
-                plan["previous_shelter"] = {"id": old["id"], "name": old["name"], "occupancy_pct": old["occupancy_pct"]}
+                plan["previous_shelter"] = {"id": old["id"], "name": old["name"], "name_en": old.get("name_en", ""),
+                                            "occupancy_pct": old["occupancy_pct"]}
     ctx.db.execute(
-        "INSERT INTO evacuation_plans (citizen_id,origin_lat,origin_lon,shelter_id,edge_ids,updated_at) VALUES (?,?,?,?,?,?)"
-        " ON CONFLICT(citizen_id) DO UPDATE SET origin_lat=excluded.origin_lat, origin_lon=excluded.origin_lon,"
-        " shelter_id=excluded.shelter_id, edge_ids=excluded.edge_ids, updated_at=excluded.updated_at",
-        (citizen_id, lat, lon, recommended["id"], json.dumps(new_edges), time.time()),
+        "INSERT INTO evacuation_plans (citizen_id,origin_lat,origin_lon,shelter_id,edge_ids,profile,updated_at)"
+        " VALUES (?,?,?,?,?,?,?) ON CONFLICT(citizen_id) DO UPDATE SET origin_lat=excluded.origin_lat,"
+        " origin_lon=excluded.origin_lon, shelter_id=excluded.shelter_id, edge_ids=excluded.edge_ids,"
+        " profile=excluded.profile, updated_at=excluded.updated_at",
+        (citizen_id, lat, lon, recommended["id"], json.dumps(new_edges), profile, time.time()),
     )
 
 

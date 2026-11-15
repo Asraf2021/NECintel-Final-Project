@@ -35,6 +35,7 @@ class BatchRouteRequest(BaseModel):
     destinations: list[Point] = Field(max_length=50)
     avoid: list[str] = Field(default_factory=list, max_length=200)
     speed_kmh: float = Field(default=4.5, gt=0, le=130)
+    profile: str = Field(default="foot", pattern="^(foot|wheelchair)$")
 
 
 class CloseRequest(BaseModel):
@@ -71,10 +72,10 @@ def create_external_app() -> FastAPI:
                 await asyncio.sleep(0.8)
         return await call_next(request)
 
-    def _route(origin: Point, dest: Point, avoid: list[str], speed: float) -> dict:
+    def _route(origin: Point, dest: Point, avoid: list[str], speed: float, profile: str = "foot") -> dict:
         closed = set(state["closures"]) | set(avoid)
         return graph.shortest_path(
-            (origin.lat, origin.lon), (dest.lat, dest.lon), closed, state["congestion"], speed
+            (origin.lat, origin.lon), (dest.lat, dest.lon), closed, state["congestion"], speed, profile
         ).to_dict()
 
     @app.get("/v1/health")
@@ -86,7 +87,8 @@ def create_external_app() -> FastAPI:
         return {
             "nodes": list(graph.nodes.values()),
             "edges": [
-                {"id": e.id, "a": e.a, "b": e.b, "name": e.name, "length_m": round(e.length_m)}
+                {"id": e.id, "a": e.a, "b": e.b, "name": e.name, "length_m": round(e.length_m),
+                 "accessible": e.accessible, "barrier": e.barrier}
                 for e in graph.edges.values()
             ],
         }
@@ -101,13 +103,13 @@ def create_external_app() -> FastAPI:
 
     @app.get("/v1/route")
     async def route(from_lat: float, from_lon: float, to_lat: float, to_lon: float,
-                    avoid: str = "", speed_kmh: float = 4.5):
+                    avoid: str = "", speed_kmh: float = 4.5, profile: str = "foot"):
         return _route(Point(lat=from_lat, lon=from_lon), Point(lat=to_lat, lon=to_lon),
-                      [a for a in avoid.split(",") if a], speed_kmh)
+                      [a for a in avoid.split(",") if a], speed_kmh, profile)
 
     @app.post("/v1/routes/batch")
     async def routes_batch(req: BatchRouteRequest):
-        return {"routes": [_route(req.origin, d, req.avoid, req.speed_kmh) for d in req.destinations]}
+        return {"routes": [_route(req.origin, d, req.avoid, req.speed_kmh, req.profile) for d in req.destinations]}
 
     # ----- Simulyasiya idarəsi (real provayderdə olmur) -----
     @app.post("/v1/sim/roads/{edge_id}/close")

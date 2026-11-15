@@ -1,6 +1,6 @@
 /* Modul 1 — Vətəndaş Təhlükəsizlik tətbiqi */
 (function () {
-  const { api, esc, connectStream, fmtDist, fmtMin, fmtNum, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
+  const { nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
     createMap, shelterIcon, toast, t } = window.UCE;
   const $ = (id) => document.getElementById(id);
   const SOS_TYPES = ["fire", "collapse", "flood", "medical"];
@@ -21,15 +21,21 @@
   const state = {
     cid: citizenId(), meta: null, pos: null, plan: null, selectedId: null, loading: false,
     citizen: { status: "unknown", active_sos: [], shelter_id: null }, degraded: false, banners: [], conn: "reconnect",
-    closures: [],
+    closures: [], barriers: [], role: storedRole(),
   };
-  let map, meMarker, routeLayer, routeCasing, roadsLayer, closuresLayer, sheltersLayer;
+  let map, meMarker, routeLayer, routeCasing, roadsLayer, closuresLayer, sheltersLayer, barrierLayer;
+
+  function storedRole() {
+    try { return localStorage.getItem("uce_role") === "priority_citizen" ? "priority_citizen" : "citizen"; } catch (e) { return "citizen"; }
+  }
+  const isPriority = () => state.role === "priority_citizen";
 
   // ---------- Xəritə ----------
   function initMap() {
     const c = state.meta.city;
     map = createMap("map", c.center, c.zoom, false);
     roadsLayer = L.layerGroup().addTo(map);
+    barrierLayer = L.layerGroup().addTo(map);
     closuresLayer = L.layerGroup().addTo(map);
     sheltersLayer = L.layerGroup().addTo(map);
     map.on("click", (e) => setPosition(e.latlng.lat, e.latlng.lng, true));
@@ -42,10 +48,23 @@
       const data = await api("/roads");
       roadsLayer.clearLayers();
       data.edges.forEach((e) => L.polyline(e.points, { color: "#93A1B3", weight: 2.500, opacity: .75, interactive: false }).addTo(roadsLayer));
+      state.barriers = data.edges.filter((e) => !e.accessible);
+      drawBarriers();
       state.closures = data.closures;
       setDegraded(data.routing.degraded);
       drawClosures();
     } catch (e) { /* xəritə yolsuz da işləyir */ }
+  }
+
+  // Prioritet rejimdə əlçatan olmayan seqmentlər (pilləkən, yeraltı keçid...) xəritədə göstərilir
+  function drawBarriers() {
+    if (!barrierLayer) return;
+    barrierLayer.clearLayers();
+    if (!isPriority()) return;
+    state.barriers.forEach((e) => {
+      L.polyline(e.points, { color: "#F2A20C", weight: 5, opacity: .95, dashArray: "2 7", lineCap: "round" })
+        .bindTooltip(esc(t("barrier." + e.barrier)) + " — " + esc(e.name)).addTo(barrierLayer);
+    });
   }
 
   function drawClosures() {
@@ -61,7 +80,7 @@
     if (!state.plan) return;
     state.plan.shelters.forEach((s) => {
       L.marker([s.lat, s.lon], { icon: shelterIcon(s, s.id === state.selectedId), zIndexOffset: s.id === state.selectedId ? 500 : 0 })
-        .on("click", () => selectShelter(s.id)).bindTooltip(esc(s.name)).addTo(sheltersLayer);
+        .on("click", () => selectShelter(s.id)).bindTooltip(esc(nm(s))).addTo(sheltersLayer);
     });
   }
 
@@ -95,7 +114,7 @@
     if (!state.pos) return;
     if (!state.plan) { state.loading = true; renderPlan(); }
     try {
-      const q = "lat=" + state.pos.lat.toFixed(6) + "&lon=" + state.pos.lon.toFixed(6) + "&citizen_id=" + state.cid;
+      const q = "lat=" + state.pos.lat.toFixed(6) + "&lon=" + state.pos.lon.toFixed(6) + "&citizen_id=" + state.cid + "&role=" + state.role;
       applyPlan(await api("/evacuation?" + q), opts);
     } catch (e) {
       state.loading = false;
@@ -120,7 +139,7 @@
   function pushReroute(plan) {
     let text = t("reroute.road_closed");
     if (plan.reroute_reason === "shelter_full" && plan.previous_shelter) {
-      text = t("reroute.shelter_full", { old: plan.previous_shelter.name, pct: Math.round(plan.previous_shelter.occupancy_pct), new: plan.recommended.name });
+      text = t("reroute.shelter_full", { old: nm(plan.previous_shelter), pct: Math.round(plan.previous_shelter.occupancy_pct), new: nm(plan.recommended) });
     }
     state.banners = state.banners.filter((b) => b.kind !== "reroute");
     state.banners.unshift({ kind: "reroute", title: t("reroute.title"), text });
@@ -163,8 +182,9 @@
     const box = $("statusCard");
     if (c.active_sos && c.active_sos.length) {
       const s = c.active_sos[0];
-      const line = s.status === "assigned" && s.brigade_name
-        ? '<div class="st-line">' + ICON.brigade + "<span>" + esc(t("sos.assigned", { name: s.brigade_name })) + "</span></div>" : "";
+      let line = s.status === "assigned" && s.brigade_name
+        ? '<div class="st-line">' + ICON.brigade + "<span>" + esc(t("sos.assigned", { name: nm({ name: s.brigade_name, name_en: s.brigade_name_en }) })) + "</span></div>" : "";
+      if (s.priority === 1) line = '<div class="st-line st-priority">' + ICON.wheelchair + "<span>" + esc(t("sos.priority")) + "</span></div>" + line;
       box.innerHTML = '<div class="status-card is-sos" role="status"><h3>' + ICON[s.type] + "<span>" + esc(t("sos.sent")) + " · " +
         esc(t("sos.type." + s.type)) + "</span></h3><p>" + esc(t("sos.wait")) + "</p>" + line + "</div>";
     } else if (c.status === "safe") {
@@ -184,7 +204,11 @@
     if (state.loading) { box.innerHTML = '<div class="skeleton"></div>'; return; }
     if (!state.plan) { box.innerHTML = '<div class="card empty"><span class="e-ico">' + ICON.pin + "</span>" + esc(t("plan.empty")) + "</div>"; return; }
     const plan = state.plan;
-    if (!plan.shelters.length) { box.innerHTML = '<div class="card empty">' + esc(t("plan.none")) + "</div>"; return; }
+    const wheel = plan.profile === "wheelchair";
+    if (!plan.shelters.length || (wheel && !plan.recommended)) {
+      box.innerHTML = '<div class="card empty">' + (wheel ? '<span class="e-ico">' + ICON.wheelchair + "</span>" + esc(t("plan.no_accessible")) : esc(t("plan.none"))) + "</div>";
+      return;
+    }
 
     const s = selected();
     const rec = plan.recommended;
@@ -195,13 +219,15 @@
       const r = s.route;
       html += '<section class="card rec"><h2 class="card-title"><span class="ti">' + ICON.route + "</span>" +
         esc(t(isRec ? "plan.recommended" : "plan.selected")) + "</h2>" +
-        '<div class="rec-head"><span class="rec-ico" style="--c:' + levelColor(s) + '">' + ICON[TYPE_ICON[s.type]] + '</span><div><div class="rec-name">' + esc(s.name) +
+        (wheel ? '<div class="acc-badge">' + ICON.wheelchair + "<span>" + esc(t("plan.accessible_route")) + "</span></div>" : "") +
+        '<div class="rec-head"><span class="rec-ico" style="--c:' + levelColor(s) + '">' + ICON[TYPE_ICON[s.type]] + '</span><div><div class="rec-name">' + esc(nm(s)) +
         '</div><div class="rec-meta">' + esc(t("type." + s.type)) + " · " + esc(districtName(s.district_id)) + "</div></div></div>" +
-        '<div class="rec-stats"><div class="stat"><b>' + (r ? esc(fmtMin(r.duration_min)) : "—") + "</b><span>" + esc(t("plan.walk")) + "</span></div>" +
+        '<div class="rec-stats"><div class="stat"><b>' + (r ? esc(fmtMin(r.duration_min)) : "—") + "</b><span>" + esc(t(wheel ? "plan.wheel" : "plan.walk")) + "</span></div>" +
         '<div class="stat"><b>' + (r ? esc(fmtDist(r.distance_m)) : esc(fmtDist(s.distance_m))) + "</b><span>" + esc(t("plan.route")) + "</span></div>" +
         '<div class="stat"><b>' + esc(fmtNum(free)) + "</b><span>" + esc(t("plan.free")) + "</span></div></div>" +
         '<div class="occ-row"><span>' + esc(t("plan.occupancy")) + '</span><b>' + s.occupancy_pct + "% · " + fmtNum(s.occupancy) + " / " + fmtNum(s.capacity) + "</b></div>" + occBar(s);
       if (isRec && rec.reason !== "nearest") html += '<p class="note">' + esc(t("plan.reason." + rec.reason)) + "</p>";
+      if (wheel && state.barriers.length) html += '<p class="note note-acc">' + esc(t("plan.barriers_avoided", { n: state.barriers.length })) + "</p>";
       if (r && r.steps && r.steps.length) {
         html += '<ol class="steps" aria-label="' + esc(t("plan.steps")) + '">' + r.steps.map((st) => "<li><span>" + esc(st.road) + "</span><span>" + esc(fmtDist(st.distance_m)) + "</span></li>").join("") + "</ol>";
       } else if (r) html += '<ol class="steps"><li><span>' + esc(t("plan.direct")) + "</span><span>" + esc(fmtDist(r.distance_m)) + "</span></li></ol>";
@@ -214,7 +240,8 @@
       const full = !sh.accepting;
       const sub = (sh.route ? fmtMin(sh.route.duration_min) + " · " + fmtDist(sh.route.distance_m) : t("plan.no_route")) + " · " + t("type." + sh.type);
       html += '<button type="button" class="item' + (sh.id === state.selectedId ? " is-active" : "") + (full ? " is-full" : "") + '" data-shelter="' + esc(sh.id) + '" style="--c:' + levelColor(sh) + '">' +
-        '<span class="item-ico">' + ICON[TYPE_ICON[sh.type]] + '</span><span><span class="item-name">' + esc(sh.name) + '</span><span class="item-sub" style="display:block">' + esc(sub) + "</span>" + occBar(sh) +
+        '<span class="item-ico">' + ICON[TYPE_ICON[sh.type]] + '</span><span><span class="item-name">' + esc(nm(sh)) + (sh.accessible ? ' <span class="acc-dot" title="' + esc(t("plan.accessible")) + '">' + ICON.wheelchair + "</span>" : "") +
+        '</span><span class="item-sub" style="display:block">' + esc(sub) + "</span>" + occBar(sh) +
         '</span><span class="item-pct">' + Math.round(sh.occupancy_pct) + "%<small>" + (full ? esc(t("plan.full")) : esc(fmtNum(sh.capacity - sh.occupancy))) + "</small></span></button>";
     });
     html += "</div></section>";
@@ -224,7 +251,8 @@
   function renderLegend() {
     const items = [["low", "<40%"], ["medium", "40–70%"], ["high", "70–90%"], ["full", "90–95%"], ["critical", ">95%"]];
     $("legend").innerHTML = "<b>" + esc(t("legend.title")) + "</b>" + items.map((i) => '<span><i style="background:' + LEVEL_COLOR[i[0]] + '"></i>' + i[1] + "</span>").join("") +
-      '<span><i class="rt"></i>' + esc(t("legend.route")) + '</span><span><i class="ln"></i>' + esc(t("legend.closed")) + "</span>";
+      '<span><i class="rt"></i>' + esc(t("legend.route")) + '</span><span><i class="ln"></i>' + esc(t("legend.closed")) + "</span>" +
+      (isPriority() ? '<span><i class="bn"></i>' + esc(t("legend.barrier")) + "</span>" : "");
   }
 
   function renderConn() {
@@ -234,20 +262,21 @@
 
   function districtName(id) {
     const d = state.meta.districts.find((x) => x.id === id);
-    return d ? d.name : "";
+    return d ? nm(d) : "";
   }
 
   function fillDistricts() {
     const sel = $("district");
     const cur = sel.value;
     sel.innerHTML = '<option value="">' + esc(t("loc.district")) + "</option>" +
-      state.meta.districts.map((d) => '<option value="' + esc(d.id) + '">' + esc(d.name) + "</option>").join("");
+      state.meta.districts.map((d) => '<option value="' + esc(d.id) + '">' + esc(nm(d)) + "</option>").join("");
     sel.value = cur;
   }
 
   // ---------- SOS və status ----------
   function openSheet() {
     if (!state.pos) { toast(t("sos.need_location"), "error"); $("district").focus(); return; }
+    $("sosPriorityNote").hidden = !isPriority();
     $("sosGrid").innerHTML = SOS_TYPES.map((type) => '<button type="button" class="sos-type" data-sos="' + type + '">' + ICON[type] + "<span>" + esc(t("sos.type." + type)) + "</span></button>").join("");
     $("sosSheet").hidden = false;
     const first = $("sosGrid").querySelector("button");
@@ -275,7 +304,7 @@
       if (shelterId) body.shelter_id = shelterId;
       if (state.pos) { body.lat = state.pos.lat; body.lon = state.pos.lon; }
       const res = await api("/status", { method: "POST", body });
-      state.safeShelterName = res.shelter ? res.shelter.name : null;
+      state.safeShelterName = res.shelter ? nm(res.shelter) : null;
       toast(t("safe.done"), "success");
       await loadCitizen();
       $("panel").scrollTo({ top: 0, behavior: "smooth" });
@@ -296,6 +325,31 @@
     renderStatus();
   }
 
+  // ---------- Rol: Hərəkət məhdudiyyətli / xüsusi qayğı (Challenge Drop 1) ----------
+  function renderRole() {
+    $("roleToggle").checked = isPriority();
+    $("sosBadge").hidden = !isPriority();
+    document.body.classList.toggle("is-priority", isPriority());
+    renderLegend();
+    drawBarriers();
+  }
+
+  async function saveRole(role, quiet) {
+    try {
+      await api("/citizens/" + state.cid + "/profile", { method: "PUT", body: { role } });
+      state.role = role;
+      try { localStorage.setItem("uce_role", role); } catch (e) { /* ignore */ }
+      renderRole();
+      if (!quiet) toast(t(role === "priority_citizen" ? "role.saved_on" : "role.saved_off"), "success");
+      state.banners = state.banners.filter((b) => b.kind !== "reroute");
+      if (state.pos) loadPlan({ fit: true });
+      loadCitizen();
+    } catch (e) {
+      toast(t("common.error"), "error");
+      renderRole();
+    }
+  }
+
   // ---------- Canlı hadisələr ----------
   const refreshPlan = debounce(() => loadPlan(), 400);
   function onEvent(name, data) {
@@ -303,7 +357,7 @@
     else if (name === "shelter_update") {
       if (data.opened && data.shelter) {
         state.banners = state.banners.filter((b) => b.kind !== "opened");
-        state.banners.push({ kind: "opened", title: t("plan.nearest"), text: t("reroute.new_shelter", { name: data.shelter.name }) });
+        state.banners.push({ kind: "opened", title: t("plan.nearest"), text: t("reroute.new_shelter", { name: nm(data.shelter) }) });
         renderBanners();
       }
       refreshPlan();
@@ -312,7 +366,7 @@
     else if (name === "sos_assigned" || name === "sos_resolved") {
       if (name === "sos_resolved") toast(t("sos.resolved"));
       loadCitizen();
-    } else if (name === "reset") { state.banners = []; loadRoads(); loadCitizen(); refreshPlan(); }
+    } else if (name === "reset") { state.banners = []; loadRoads(); loadCitizen(); if (isPriority()) saveRole("priority_citizen", true); else refreshPlan(); }
   }
 
   // ---------- Başlanğıc ----------
@@ -333,6 +387,7 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("sosSheet").hidden) closeSheet(); });
     $("sosGrid").addEventListener("click", (e) => { const b = e.target.closest("[data-sos]"); if (b) sendSos(b.dataset.sos); });
     $("safeBtn").addEventListener("click", () => markSafe(null));
+    $("roleToggle").addEventListener("change", (e) => saveRole(e.target.checked ? "priority_citizen" : "citizen"));
     $("planBox").addEventListener("click", (e) => {
       const item = e.target.closest("[data-shelter]");
       if (item) return selectShelter(item.dataset.shelter);
@@ -344,7 +399,7 @@
       const b = e.target.closest("[data-dismiss]");
       if (b) { state.banners.splice(Number(b.dataset.dismiss), 1); renderBanners(); }
     });
-    window.I18N.onChange(() => { fillDistricts(); renderLegend(); renderConn(); renderAll(false); drawClosures(); });
+    window.I18N.onChange(() => { fillDistricts(); renderLegend(); renderConn(); renderAll(false); drawClosures(); drawBarriers(); });
   }
 
   async function start() {
@@ -352,6 +407,8 @@
     $("icoLoc").innerHTML = ICON.pin;
     $("icoGps").innerHTML = ICON.gps;
     $("icoSafe").innerHTML = ICON.check;
+    $("icoWheel").innerHTML = ICON.wheelchair;
+    $("icoWheel2").innerHTML = ICON.wheelchair;
     renderConn();
     try {
       state.meta = await api("/meta");
@@ -360,7 +417,9 @@
       $("planBox").addEventListener("click", (ev) => { if (ev.target.closest("#reloadBtn")) location.reload(); });
       return;
     }
-    initMap(); fillDistricts(); renderLegend(); bind(); renderPlan();
+    initMap(); fillDistricts(); renderLegend(); bind(); renderPlan(); renderRole();
+    // Server bazası sıfırlansa belə rol itməsin: saxlanılmış rol serverə yenidən yazılır
+    if (isPriority()) saveRole("priority_citizen", true);
     loadRoads(); loadCitizen();
     connectStream("/api/v1/stream?citizen_id=" + state.cid, onEvent, (s) => { state.conn = s; renderConn(); if (s === "live" && state.pos) refreshPlan(); });
     // SSE kəsilsə belə məlumat köhnəlməsin

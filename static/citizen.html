@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0B1F33">
-  <title>Təhlükəsiz Təxliyə — Vətəndaş</title>
+  <title data-i18n="page.citizen">Təhlükəsiz Təxliyə — Vətəndaş</title>
   <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/static/css/base.css">
   <link rel="stylesheet" href="/static/css/citizen.css">
@@ -14,12 +14,12 @@
     <a class="brand" href="/" data-i18n-title="common.back"><span class="brand-mark" id="brandMark"></span><span data-i18n="app.name">Təhlükəsiz Təxliyə</span></a>
     <div class="c-top-right">
       <span class="chip c-conn"><span class="dot" id="connDot"></span><span id="connText"></span></span>
-      <div class="lang-switch" data-lang-switch></div>
+      <div class="lang-switch" data-lang-switch role="group" data-i18n-aria="aria.lang"></div>
     </div>
   </header>
 
   <div class="c-layout">
-    <section class="c-map" aria-label="Xəritə">
+    <section class="c-map" aria-label="Xəritə" data-i18n-aria="aria.map">
       <div id="map"></div>
       <div class="c-legend" id="legend"></div>
     </section>
@@ -36,14 +36,19 @@
           <button class="btn" id="gpsBtn" type="button"><span id="icoGps"></span><span data-i18n="loc.gps">Mənim yerim</span></button>
         </div>
         <p class="hint" data-i18n="loc.hint">Və ya xəritədə nöqtəyə toxunun</p>
+        <label class="role-toggle" for="roleToggle">
+          <span class="role-ico" id="icoWheel"></span>
+          <span class="role-text"><b data-i18n="role.priority">Hərəkət məhdudiyyətim var / xüsusi qayğıya ehtiyacım var</b><small data-i18n="role.priority.desc"></small></span>
+          <input type="checkbox" id="roleToggle" class="switch">
+        </label>
       </section>
 
       <div id="planBox"></div>
     </aside>
   </div>
 
-  <nav class="c-actions" aria-label="Təcili əməliyyatlar">
-    <button class="act act-sos" id="sosBtn" type="button"><span class="act-ring"></span><span class="act-label" data-i18n="sos.button">SOS</span></button>
+  <nav class="c-actions" aria-label="Təcili əməliyyatlar" data-i18n-aria="aria.actions">
+    <button class="act act-sos" id="sosBtn" type="button"><span class="act-ring"></span><span class="act-label" data-i18n="sos.button">SOS</span><span class="act-badge" id="sosBadge" hidden>P1</span></button>
     <button class="act act-safe" id="safeBtn" type="button"><span id="icoSafe"></span><span data-i18n="safe.button">Təhlükəsizəm</span></button>
   </nav>
 
@@ -52,6 +57,7 @@
       <div class="sheet-grip"></div>
       <h2 id="sosTitle" data-i18n="sos.title">Təhlükədəsiniz?</h2>
       <p class="sheet-sub" data-i18n="sos.choose"></p>
+      <p class="sheet-priority" id="sosPriorityNote" hidden><span id="icoWheel2"></span><span><b data-i18n="sos.priority"></b><br><span data-i18n="sos.priority_note"></span></span></p>
       <div class="sos-grid" id="sosGrid"></div>
       <label class="sr-only" for="sosNote" data-i18n="sos.note"></label>
       <input id="sosNote" class="input" maxlength="280" autocomplete="off" data-i18n-ph="sos.note">

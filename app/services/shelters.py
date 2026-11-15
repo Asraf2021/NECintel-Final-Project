@@ -21,7 +21,7 @@ def decorate(s: dict) -> dict:
         level = "medium"
     else:
         level = "low"
-    return {**s, "occupancy_pct": round(raw, 1), "level": level,
+    return {**s, "accessible": bool(s.get("accessible", 1)), "occupancy_pct": round(raw, 1), "level": level,
             "over_critical": raw > settings.shelter_critical_pct,
             "accepting": s["status"] == "open" and raw < settings.shelter_reroute_pct}
 

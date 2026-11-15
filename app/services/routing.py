@@ -143,9 +143,14 @@ class RoutingService:
         return changed
 
     # ----- Marşrut -----
-    async def routes(self, origin: tuple[float, float], destinations: list[tuple[float, float]]) -> tuple[list[dict], str]:
-        """Bir başlanğıcdan bir neçə təyinata marşrutlar. Qaytarır: (marşrutlar, mənbə)."""
-        key = (round(origin[0], 4), round(origin[1], 4),
+    async def routes(self, origin: tuple[float, float], destinations: list[tuple[float, float]],
+                     profile: str = "foot") -> tuple[list[dict], str]:
+        """Bir başlanğıcdan bir neçə təyinata marşrutlar. Qaytarır: (marşrutlar, mənbə).
+
+        profile="wheelchair" — yalnız əlçatan (panduslu, maneəsiz) yol seqmentləri istifadə olunur.
+        """
+        speed = settings.wheelchair_speed_kmh if profile == "wheelchair" else settings.walking_speed_kmh
+        key = (profile, round(origin[0], 4), round(origin[1], 4),
                tuple((round(d[0], 4), round(d[1], 4)) for d in destinations), self._version)
         cached = self._cache.get(key)
         if cached and time.time() - cached[0] < settings.route_cache_ttl_s:
@@ -158,7 +163,8 @@ class RoutingService:
                 "origin": {"lat": origin[0], "lon": origin[1]},
                 "destinations": [{"lat": d[0], "lon": d[1]} for d in destinations],
                 "avoid": sorted(self.manual_closures),
-                "speed_kmh": settings.walking_speed_kmh,
+                "speed_kmh": speed,
+                "profile": profile,
             })
             routes = data["routes"]
             if len(routes) != len(destinations):
@@ -168,7 +174,7 @@ class RoutingService:
             self.fallback_calls += 1
             closed = self.closed_edges
             routes = [
-                self.graph.shortest_path(origin, d, closed, self.congestion, settings.walking_speed_kmh).to_dict()
+                self.graph.shortest_path(origin, d, closed, self.congestion, speed, profile).to_dict()
                 for d in destinations
             ]
         if len(self._cache) > 5000:

@@ -51,7 +51,7 @@ def overview(ctx: AppContext) -> dict:
         for s in z_active:
             by_type[s["type"]] = by_type.get(s["type"], 0) + 1
         has_alert = any(a["district_id"] == d["id"] for a in pending)
-        if has_alert or len(z_recent) >= settings.sos_cluster_count:
+        if has_alert or len(z_recent) >= settings.sos_cluster_count or any(s["priority"] == 1 for s in z_active):
             risk = "critical"
         elif len(z_recent) >= 2 or pct >= settings.shelter_reroute_pct:
             risk = "high"
@@ -60,8 +60,8 @@ def overview(ctx: AppContext) -> dict:
         else:
             risk = "low"
         zones.append({
-            "district_id": d["id"], "name": d["name"], "lat": d["lat"], "lon": d["lon"],
-            "sos_active": len(z_active), "sos_window": len(z_recent), "by_type": by_type,
+            "district_id": d["id"], "name": d["name"], "name_en": d.get("name_en", d["name"]), "lat": d["lat"], "lon": d["lon"],
+            "sos_active": len(z_active), "sos_priority": sum(1 for s in z_active if s["priority"] == 1), "sos_window": len(z_recent), "by_type": by_type,
             "shelters_open": len(z_sh), "occupancy_pct": pct,
             "brigades_available": sum(1 for b in brigades if b["district_id"] == d["id"] and b["status"] == "available"),
             "risk": risk,
@@ -81,6 +81,7 @@ def overview(ctx: AppContext) -> dict:
         "generated_at": now,
         "kpi": {
             "sos_active": len(active),
+            "sos_priority": sum(1 for s in active if s["priority"] == 1),
             "sos_window": len(recent),
             "alerts_pending": len(pending),
             "shelters_open": len(open_sh),
