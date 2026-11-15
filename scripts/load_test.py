@@ -50,6 +50,7 @@ class Stats:
         self.transport_errors: Counter = Counter()                   # istisna növü -> say
         self.started = 0.0
         self.finished = 0.0
+        self.health_after: dict | None = None             # testdən sonra /health cavabı
 
     def record(self, endpoint: str, status: int | None, ms: float, exc: str | None = None) -> None:
         self.latencies[endpoint].append(ms)
@@ -209,7 +210,7 @@ def report(stats: Stats, args: argparse.Namespace) -> int:
     print(f"  {'ÜMUMİ':<24}{len(everything):>8}{ok:>8}{limited:>6}{errors:>6}"
           f"{percentile(everything, 50):>9.1f}{percentile(everything, 95):>9.1f}{percentile(everything, 99):>9.1f}"
           f"{(everything[-1] if everything else 0):>9.1f}")
-    health = getattr(stats, "health_after", None)
+    health = stats.health_after
     if health:
         r = health.get("routing", {})
         print()
