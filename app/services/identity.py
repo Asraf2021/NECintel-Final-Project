@@ -14,9 +14,10 @@ arayış faylı açıq qovluqda deyil, yalnız icazəli dispetçer yükləyə bi
 Əlillik statusları:
   none           — qeyd yoxdur;
   declared       — vətəndaş özü bildirib (sübut yoxdur);
-  mygov_record   — myGov qeydində əlillik var, vətəndaş təsdiqləyib, arayış hələ yüklənməyib;
-  pending_review — arayış yüklənib, myGov qeydi yoxdur -> dispetçer yoxlamalıdır;
-  verified       — myGov qeydi + arayış və ya dispetçer təsdiqi;
+  mygov_record   — myGov qeydində əlillik var, vətəndaş hələ təsdiqləməyib (popup gözləyir);
+  pending_review — fayl yüklənib -> yalnız dispetçer yoxlaya bilər (fayl heç vaxt avtomatik təsdiq etmir);
+  verified       — təsdiq mənbəyi myGov-dur: profil qeydi və ya arayış nömrəsinin myGov reyestrində
+                   yoxlanması (mövcuddur, bu şəxsə aiddir, qüvvədədir); və ya dispetçerin əl ilə təsdiqi;
   rejected       — dispetçer rədd edib.
 Prioritet SOS təsdiqi gözləmir (həyat təhlükəsizliyi); dispetçer statusu SOS kartında görür.
 """
@@ -68,7 +69,17 @@ class MyGovProvider:
         self.userinfo_path = userinfo_path
         self.client_id = client_id
         self.client_secret = client_secret
+        self.certificates_path = "/certificates"
         self._states: dict[str, dict] = {}
+
+    async def lookup_certificate(self, number: str) -> dict:
+        """myGov-dan arayış nömrəsini yoxlamaq (serverdən-serverə, client açarları ilə)."""
+        from urllib.parse import quote
+        resp = await self.client.get(f"{self.certificates_path}/{quote(number, safe='')}", timeout=5.0,
+                                     headers={"X-Client-Id": self.client_id, "X-Client-Secret": self.client_secret})
+        if resp.status_code != 200:
+            raise RuntimeError("mygov_unavailable")
+        return resp.json()
 
     # ----- addım 1 -----
     def begin(self, citizen_id: str | None, redirect_uri: str) -> str:
@@ -130,6 +141,7 @@ def account_out(row: dict | None) -> dict | None:
         "mygov_disability": bool(row["mygov_disability"]), "mygov_disability_group": row["mygov_disability_group"],
         "disability_enabled": bool(row["disability_enabled"]), "disability_status": row["disability_status"],
         "certificate_uploaded": bool(row["certificate_file"]), "certificate_uploaded_at": row["certificate_uploaded_at"],
+        "verified_by": row["verified_by"],
         "prompt_pending": bool(row["mygov_disability"]) and not row["prompt_done"],
         "certificate_service_url": settings.mygov_certificate_url,
     }
@@ -200,10 +212,15 @@ def set_disability(ctx: AppContext, citizen_id: str, enabled: bool) -> dict:
     now = time.time()
     if acc:
         status = acc["disability_status"]
-        if enabled and status == "none":
+        if enabled and acc["mygov_disability"] and status != "rejected":
+            status = "verified"  # mənbə: myGov profil qeydi (OAuth ilə birbaşa myGov-dan alınıb)
+        elif enabled and status == "none":
             status = "declared"
-        ctx.db.execute("UPDATE citizen_accounts SET disability_enabled=?, disability_status=?, prompt_done=1, updated_at=?"
-                       " WHERE citizen_id=?", (1 if enabled else 0, status, now, citizen_id))
+        verified_now = status == "verified" and acc["disability_status"] != "verified"
+        ctx.db.execute("UPDATE citizen_accounts SET disability_enabled=?, disability_status=?, prompt_done=1, updated_at=?,"
+                       " verified_at=COALESCE(?, verified_at), verified_by=COALESCE(?, verified_by) WHERE citizen_id=?",
+                       (1 if enabled else 0, status, now, now if verified_now else None,
+                        "mygov_record" if verified_now else None, citizen_id))
         ctx.db.audit(citizen_id, "citizen", "disability_toggle", {"enabled": enabled})
     sos_svc.set_profile(ctx, citizen_id, "priority_citizen" if enabled else "citizen")
     return account_out(get_account(ctx, citizen_id))
@@ -236,18 +253,50 @@ def save_certificate(ctx: AppContext, citizen_id: str, content: bytes, mime: str
             os.remove(os.path.join(settings.upload_dir, acc["certificate_file"]))
         except OSError:
             pass
-    status = "verified" if acc["mygov_disability"] else "pending_review"
+    # Faylın məzmununu sistem yoxlaya bilməz -> fayl heç vaxt avtomatik təsdiq etmir, yalnız dispetçer yoxlayır.
+    # Artıq myGov ilə təsdiqlənibsə, status dəyişmir (fayl sadəcə əlavə olunur).
+    status = "verified" if acc["disability_status"] == "verified" else "pending_review"
     now = time.time()
     ctx.db.execute(
         "UPDATE citizen_accounts SET certificate_file=?, certificate_mime=?, certificate_uploaded_at=?, disability_status=?,"
-        " disability_enabled=1, prompt_done=1, verified_at=?, verified_by=?, updated_at=? WHERE citizen_id=?",
-        (name, mime, now, status, now if status == "verified" else None, "mygov" if status == "verified" else None,
-         now, citizen_id))
+        " disability_enabled=1, prompt_done=1, updated_at=? WHERE citizen_id=?",
+        (name, mime, now, status, now, citizen_id))
     ctx.db.audit(citizen_id, "citizen", "certificate_upload", {"status": status, "bytes": len(content)})
     from . import sos as sos_svc
     sos_svc.set_profile(ctx, citizen_id, "priority_citizen")
     ctx.bus.publish("verification_update", {"citizen_id": citizen_id, "status": status}, channel="ops")
     return account_out(get_account(ctx, citizen_id))
+
+
+async def verify_certificate_number(ctx: AppContext, provider: MyGovProvider, citizen_id: str, number: str) -> dict:
+    """Arayış nömrəsini myGov reyestrində yoxlayır: mövcuddur, BU şəxsə aiddir, qüvvədədir -> verified.
+
+    Uğursuz cəhd statusu dəyişmir; səbəb qaytarılır (not_found / not_owner / expired / revoked).
+    """
+    from . import sos as sos_svc
+    acc = get_account(ctx, citizen_id)
+    if not acc:
+        raise PermissionError("account_required")
+    result = await provider.lookup_certificate(number)
+    reason = None
+    if not result.get("found"):
+        reason = "not_found"
+    elif _hash("sub:" + str(result.get("holder_sub"))) != acc["sub_hash"]:
+        reason = "not_owner"  # başqasının arayışı
+    elif result.get("status") != "active":
+        reason = result.get("status") or "invalid"
+    ctx.db.audit(citizen_id, "citizen", "certificate_verify", {"ok": reason is None, "reason": reason})
+    if reason:
+        raise ValueError(reason)
+    now = time.time()
+    ctx.db.execute(
+        "UPDATE citizen_accounts SET disability_status='verified', disability_enabled=1, prompt_done=1,"
+        " mygov_disability_group=COALESCE(mygov_disability_group, ?), verified_at=?, verified_by='mygov_certificate',"
+        " updated_at=? WHERE citizen_id=?", (result.get("group"), now, now, citizen_id))
+    sos_svc.set_profile(ctx, citizen_id, "priority_citizen")
+    ctx.bus.publish("verification_update", {"citizen_id": citizen_id, "status": "verified"}, channel="ops")
+    return {**account_out(get_account(ctx, citizen_id)), "certificate": {
+        "number": result.get("certificate_no"), "group": result.get("group"), "valid_until": result.get("valid_until")}}
 
 
 def review(ctx: AppContext, citizen_id: str, approve: bool, actor: dict) -> dict | None:
@@ -265,6 +314,6 @@ def review(ctx: AppContext, citizen_id: str, approve: bool, actor: dict) -> dict
 
 
 def pending_reviews(ctx: AppContext) -> list[dict]:
-    rows = ctx.db.query("SELECT * FROM citizen_accounts WHERE disability_status IN ('pending_review','mygov_record','declared')"
+    rows = ctx.db.query("SELECT * FROM citizen_accounts WHERE disability_status IN ('pending_review','declared')"
                         " AND disability_enabled=1 ORDER BY updated_at DESC LIMIT 100")
     return [{**account_out(r), "full_name": f'{r["given_name"]} {r["family_name"]}'.strip()} for r in rows]

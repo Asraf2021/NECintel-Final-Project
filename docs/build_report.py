@@ -348,7 +348,7 @@ SECTIONS: list[dict] = [
                   "yolu verməyə və fon tapşırığını söndürməyə imkan verir, xarici API simulyatoru isə proses daxilində "
                   "işləyir — ona görə testlər şəbəkə və əlavə servis tələb etmir. İşə salma: python -m pytest -q. "
                   "Nəticələr README-də göstərilib."),
-            ("p", "Nəticə: 358 avtomatik test, hamısı uğurlu (≈13 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
+            ("p", "Nəticə: 370 avtomatik test, hamısı uğurlu (≈12 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
                   "yoxlayır: 3 və 4 fərqli SOS, eyni vətəndaşdan təkrar siqnal, 5 dəqiqəlik pəncərə, 500 m radius, "
                   "doluluğun dəqiq 95% və 95%-dən yuxarı olması, 90% marşrut həddi. Test yazılarkən 5 real qüsur "
                   "aşkarlandı və düzəldildi (faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi, vətəndaşın "

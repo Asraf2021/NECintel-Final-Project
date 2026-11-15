@@ -199,3 +199,8 @@
 .dis-msg { min-height: 18px; font-size: 13px; font-weight: 600; }
 .dis-msg.is-ok { color: var(--green-dark); }
 .dis-msg.is-err { color: var(--red-dark); }
+.dis-verify-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 6px; }
+.dis-btns.one { grid-template-columns: 1fr; }
+.dis-file { text-align: left; border-top: 1px solid var(--line); padding-top: 8px; margin-top: 4px; }
+.dis-file summary { font-size: 12px; color: var(--ink-2); cursor: pointer; line-height: 1.35; }
+.dis-file .dis-drop { margin: 10px 0 8px; }

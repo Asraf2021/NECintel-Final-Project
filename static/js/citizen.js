@@ -427,23 +427,26 @@
         '</p><a class="btn btn-mygov" href="/api/v1/auth/mygov/start?citizen_id=' + encodeURIComponent(state.cid) + '">' + ICON.shield + "<span>" + esc(t("acc.login")) + "</span></a>";
       return;
     }
-    const canUpload = a.disability_enabled && a.disability_status !== "verified";
+    const canUpload = a.disability_status !== "verified";
     box.innerHTML = '<h2 class="card-title"><span class="ti">' + ICON.users + "</span>" + esc(t("acc.title")) + '</h2><div class="acc-row"><div><div class="acc-name">' +
       esc(a.given_name + " " + a.family_name) + '</div><div class="acc-sub">' + esc(t("acc.via")) + (a.phone_masked ? " · " + esc(a.phone_masked) : "") + "</div></div>" +
-      verChip(a.disability_status) + '</div><div class="acc-actions">' +
-      (canUpload ? '<button class="btn btn-sm" type="button" id="accUpload">' + esc(t("acc.upload_link")) + "</button>" : "") +
+      verChip(a.disability_status) + '</div>' +
+      (a.disability_status === "verified" && a.verified_by ? '<div class="acc-sub">' + esc(t("acc.verified_by." + a.verified_by) === "acc.verified_by." + a.verified_by ? a.verified_by : t("acc.verified_by." + a.verified_by)) + "</div>" : "") +
+      '<div class="acc-actions">' +
+      (canUpload ? '<button class="btn btn-sm" type="button" id="accUpload">' + esc(t("dis.verify")) + "</button>" : "") +
       '<button class="btn btn-sm btn-ghost" type="button" id="accLogout">' + ICON.logout + "<span>" + esc(t("acc.logout")) + "</span></button></div>";
   }
 
   function openDis(step) {
     if (!state.account) { toast(t("dis.need_login"), "error"); return; }
-    $("disText").textContent = t("dis.text", { group: state.account.mygov_disability_group || "—" });
+    const a = state.account;
+    $("disText").textContent = a.mygov_disability ? t("dis.text", { group: a.mygov_disability_group || "—" }) : t("dis.text_norec");
     $("disMygovLink").href = state.account.certificate_service_url || "https://mygov.az";
     $("disStep1").hidden = step !== 1;
     $("disStep2").hidden = step !== 2;
     $("disMsg").textContent = ""; $("disMsg").className = "dis-msg";
     $("disModal").hidden = false;
-    const focus = step === 1 ? $("disConfirm") : $("disMygovLink");
+    const focus = step === 1 ? $("disConfirm") : $("disCertNo");
     if (focus) focus.focus();
   }
   function closeDis() { $("disModal").hidden = true; }
@@ -460,8 +463,37 @@
       try { localStorage.setItem("uce_role", state.role); } catch (e) { /* ignore */ }
       renderRole(); renderAccount();
       if (state.pos) loadPlan({ fit: true });
-      openDis(2);
+      if (state.account.disability_status === "verified") {
+        // Mənbə myGov profil qeydidir — fayl və ya nömrə tələb olunmur
+        toast(t("dis.confirmed_rec"), "success");
+        closeDis();
+      } else openDis(2);
     } catch (e) { toast(t("common.error"), "error"); }
+  }
+
+  async function verifyCertificate() {
+    const no = $("disCertNo").value.trim();
+    const msg = $("disMsg");
+    if (no.length < 4) { $("disCertNo").focus(); return; }
+    msg.textContent = t("dis.verifying"); msg.className = "dis-msg";
+    $("disVerify").disabled = true;
+    try {
+      const res = await api("/me/disability/verify", { method: "POST", body: { certificate_no: no } });
+      state.account = res;
+      state.role = "priority_citizen";
+      try { localStorage.setItem("uce_role", state.role); } catch (e) { /* ignore */ }
+      renderRole(); renderAccount();
+      if (state.pos) loadPlan({ fit: true });
+      msg.textContent = t("dis.ok_verified", { group: res.certificate.group, until: res.certificate.valid_until });
+      msg.className = "dis-msg is-ok";
+      setTimeout(closeDis, 2600);
+    } catch (e) {
+      const map = { certificate_not_found: "dis.err_not_found", certificate_not_owner: "dis.err_not_owner", certificate_expired: "dis.err_expired" };
+      msg.textContent = t(e.status === 429 ? "dis.err_rate" : e.status === 503 ? "dis.err_mygov" : (map[e.message] || "dis.err_not_found"));
+      msg.className = "dis-msg is-err";
+    } finally {
+      $("disVerify").disabled = false;
+    }
   }
 
   async function uploadCertificate() {
@@ -485,7 +517,7 @@
       }
       state.account = data;
       renderAccount();
-      msg.textContent = t(data.disability_status === "verified" ? "dis.done_verified" : "dis.done_pending");
+      msg.textContent = t("dis.done_pending");
       msg.className = "dis-msg is-ok";
       setTimeout(closeDis, 2200);
     } catch (e) {
@@ -552,6 +584,8 @@
     $("disConfirm").addEventListener("click", confirmDis);
     $("disLater").addEventListener("click", closeDis);
     $("disUpload").addEventListener("click", uploadCertificate);
+    $("disVerify").addEventListener("click", verifyCertificate);
+    $("disCertNo").addEventListener("keydown", (e) => { if (e.key === "Enter") verifyCertificate(); });
     $("disFile").addEventListener("change", () => {
       const f = $("disFile").files[0];
       $("disFileName").textContent = f ? f.name + " · " + Math.ceil(f.size / 1024) + " KB" : "PDF · JPG · PNG";

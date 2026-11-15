@@ -79,16 +79,21 @@
         </div>
       </div>
       <div id="disStep2" hidden>
-        <h2 data-i18n="dis.step2_title">Əlillik arayışını yükləyin</h2>
-        <p class="dis-step" data-i18n="dis.step1"></p>
+        <h2 data-i18n="dis.step2_title_no">Arayışı myGov ilə yoxlayın</h2>
+        <p class="dis-step" data-i18n="dis.step_no"></p>
         <a class="btn btn-block dis-mygov" id="disMygovLink" href="https://mygov.az" target="_blank" rel="noopener noreferrer"><span data-i18n="dis.open_mygov">myGov-da arayışı aç</span> ↗</a>
-        <p class="dis-step" data-i18n="dis.step2"></p>
-        <label class="dis-drop" for="disFile"><input type="file" id="disFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><span id="disFileName">PDF · JPG · PNG</span></label>
-        <p class="dis-msg" id="disMsg" role="status"></p>
-        <div class="dis-btns">
-          <button class="btn" type="button" id="disLater" data-i18n="dis.later">Sonra</button>
-          <button class="btn btn-primary" type="button" id="disUpload" data-i18n="dis.upload">Yüklə</button>
+        <label class="sr-only" for="disCertNo" data-i18n="dis.cert_no"></label>
+        <div class="dis-verify-row">
+          <input id="disCertNo" class="input" maxlength="40" autocomplete="off" spellcheck="false" data-i18n-ph="dis.cert_no">
+          <button class="btn btn-primary" type="button" id="disVerify" data-i18n="dis.verify">myGov ilə yoxla</button>
         </div>
+        <p class="dis-msg" id="disMsg" role="status"></p>
+        <details class="dis-file">
+          <summary data-i18n="dis.or_file"></summary>
+          <label class="dis-drop" for="disFile"><input type="file" id="disFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><span id="disFileName">PDF · JPG · PNG</span></label>
+          <button class="btn btn-block" type="button" id="disUpload" data-i18n="dis.upload">Yüklə</button>
+        </details>
+        <div class="dis-btns one"><button class="btn" type="button" id="disLater" data-i18n="dis.later">Sonra</button></div>
       </div>
     </div>
   </div>

@@ -5,7 +5,7 @@ import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..context import AppContext, get_ctx
@@ -18,6 +18,10 @@ CITIZEN_ID_RE = r"^[A-Za-z0-9_\-]{8,64}$"
 
 class DisabilityToggle(BaseModel):
     enabled: bool
+
+
+class CertificateNumber(BaseModel):
+    certificate_no: str = Field(min_length=4, max_length=40, pattern=r"^[A-Za-zƏəӘә0-9\-/ ]+$")
 
 
 def citizen_user(request: Request) -> dict:
@@ -79,6 +83,22 @@ def disability_skip(user: dict = Depends(citizen_user), ctx: AppContext = Depend
 def disability_toggle(body: DisabilityToggle, user: dict = Depends(citizen_user), ctx: AppContext = Depends(get_ctx)):
     """Popup-da "Təsdiq et" (enabled=true) və ya profildə istənilən vaxt dəyişmək."""
     result = identity.set_disability(ctx, user["sub"], body.enabled)
+    analytics.invalidate()
+    return result
+
+
+@router.post("/api/v1/me/disability/verify", dependencies=[rate_limit("certverify", "rate_limit_login_per_min")])
+async def certificate_verify(body: CertificateNumber, request: Request, user: dict = Depends(citizen_user),
+                             ctx: AppContext = Depends(get_ctx)):
+    """Arayış nömrəsini myGov reyestrində yoxlamaq. Brute-force-a qarşı dəqiqədə limitlidir."""
+    try:
+        result = await identity.verify_certificate_number(ctx, _provider(request), user["sub"], body.certificate_no)
+    except ValueError as exc:
+        raise HTTPException(422, "certificate_" + str(exc))
+    except PermissionError:
+        raise HTTPException(401, "citizen_auth_required")
+    except RuntimeError:
+        raise HTTPException(503, "mygov_unavailable")
     analytics.invalidate()
     return result
 

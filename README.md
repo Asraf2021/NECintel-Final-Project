@@ -146,7 +146,10 @@ Drop 1-in məhdudiyyətini — prioritet rolun vətəndaşın özü tərəfində
 1. Vətəndaş tətbiqində **"myGov ilə daxil ol"** → standart OAuth2 Authorization Code + **PKCE** axını (birdəfəlik `state`, birdəfəlik kod).
 2. myGov məlumatları (ad, soyad, doğum tarixi, maskalanmış telefon, əlillik qeydi və qrupu) sistemə düşür; hesab cihazın anonim ID-si ilə bağlanır (girişdən əvvəl göndərilmiş SOS-lar itmir). Eyni şəxs başqa cihazdan girsə, eyni hesab qaytarılır.
 3. myGov qeydində əlillik varsa, girişdən dərhal sonra **popup**: **"Keç"** və **"Təsdiq et"**.
-4. "Təsdiq et" → **arayış yükləmə**: "myGov-da arayışı aç" düyməsi myGov xidmətinə aparır (ünvan `UCE_MYGOV_CERTIFICATE_URL` ilə təyin olunur), fayl (PDF / JPG / PNG, ≤ 5 MB) yüklənir. myGov qeydi + arayış → status **"Təsdiqlənib (myGov)"**; myGov qeydi olmadan yüklənmiş arayış → dispetçer yoxlaması ("Əlillik təsdiqi" paneli: arayışa bax / təsdiqlə / rədd et).
+4. "Təsdiq et" → təsdiqi **myGov özü verir**, sistem faylın məzmununa güvənmir:
+   - myGov profilində əlillik qeydi varsa — fayl tələb olunmur, status dərhal **"Təsdiqlənib (myGov)"** (mənbə: OAuth ilə birbaşa myGov-dan alınmış qeyd);
+   - qeyd yoxdursa (məs. arayış yenicə verilib) — vətəndaş **arayış nömrəsini** daxil edir, server myGov-un sənəd reyestrində yoxlayır: *mövcuddur, bu şəxsə aiddir, qüvvədədir* → "Təsdiqlənib"; başqasının / uydurma / müddəti bitmiş nömrə → rədd, status dəyişmir (cəhdlər audit olunur və dəqiqədə limitlidir);
+   - nömrə ilə yoxlamaq mümkün deyilsə — arayış faylı (PDF / JPG / PNG, ≤ 5 MB) yüklənir, lakin fayl **heç vaxt avtomatik təsdiq vermir**: yalnız dispetçer "Əlillik təsdiqi" panelində baxıb təsdiqləyir / rədd edir.
 5. Əlillik xüsusiyyəti profildən **istənilən vaxt** yandırılıb-söndürülür; rol və aktiv SOS-ların prioriteti dərhal yenilənir.
 6. Dispetçer Priority #1 kartında statusu görür: **"✓ myGov təsdiqi" / "Yoxlanılır" / "Təsdiqlənməyib"**.
 
@@ -154,7 +157,7 @@ Drop 1-in məhdudiyyətini — prioritet rolun vətəndaşın özü tərəfində
 
 **Real myGov-a keçid:** prototipdə `mock_mygov/` simulyatoru işləyir (səhifədə "SİMULYASİYA — real myGov deyil"; test şəxsləri uydurmadır, real myGov dizaynı təqlid olunmur). Real inteqrasiya rəsmi qoşulma tələb edir (client qeydiyyatı, müqavilə, açarlar); bundan sonra kod dəyişmədən: `UCE_MYGOV_MODE=oidc`, `UCE_MYGOV_AUTHORIZE_URL`, `UCE_MYGOV_TOKEN_URL`, `UCE_MYGOV_USERINFO_URL`, `UCE_MYGOV_CLIENT_ID`, `UCE_MYGOV_CLIENT_SECRET`.
 
-**Testlər:** `tests/test_mygov.py` — 45 test (tam axın, PKCE / state / kod təkrarı, open redirect, fayl tipi və ölçüsü, saxta fayl, başqasının adından əməliyyat, dispetçer yoxlaması, CHECK constraint, audit).
+**Testlər:** `tests/test_mygov.py` — 57 test (tam axın, arayış nömrəsinin reyestr yoxlaması, PKCE / state / kod təkrarı, open redirect, fayl tipi və ölçüsü, saxta fayl, başqasının adından əməliyyat, dispetçer yoxlaması, CHECK constraint, audit).
 
 ## Beynəlxalq təcrübə və istinadlar
 
@@ -530,7 +533,7 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-**Nəticə (15.11.2026):** `358 passed in 12.93s` — 358 test, hamısı uğurlu.
+**Nəticə (15.11.2026):** `370 passed in 12.10s` — 370 test, hamısı uğurlu.
 
 | Fayl | Test | Nəyi yoxlayır |
 |---|---|---|
@@ -542,7 +545,7 @@ python -m pytest -q
 | `tests/test_resilience.py` | 17 | xarici API kəsintisində ehtiyat marşrut, circuit breaker, bərpa, kəsinti zamanı bağlı yolların nəzərə alınması |
 | `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
 | `tests/test_priority.py` | 48 | Drop 1: prioritet rol, Kritik Prioritet SOS, əlçatan marşrut, briqada seçimi, miqrasiya, i18n tamlığı |
-| `tests/test_mygov.py` | 45 | myGov ilə qeydiyyat: OAuth2 + PKCE axını, popup / təsdiq / arayış yükləmə, fayl yoxlamaları, başqasının adından əməliyyatın qarşısı, dispetçer yoxlaması |
+| `tests/test_mygov.py` | 57 | myGov ilə qeydiyyat: OAuth2 + PKCE axını, popup / təsdiq, arayış nömrəsinin myGov reyestrində yoxlanması (başqasının / uydurma / müddəti bitmiş), fayl yükləmə, fayl yoxlamaları, başqasının adından əməliyyatın qarşısı, dispetçer yoxlaması |
 | `tests/test_replan.py` | 8 | Fon planlayıcısı: dərhal cavab, siqnalların birləşdirilməsi, hesablama zamanı gələn siqnal, xətaya davamlılıq; fallback Dijkstra event loop thread-ində işləmir; məhdud paralellik |
 | `tests/test_forecast.py` | 12 | Time-to-Capacity: sənəddəki nümunə (T90 = 30, T100 = 55 dəq), etibarlılıq, artım olmadıqda vaxt yoxdur, qabaqcadan yönləndirmə |
 

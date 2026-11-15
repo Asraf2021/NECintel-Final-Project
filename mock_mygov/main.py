@@ -34,11 +34,28 @@ PERSONAS = {
                           "certificate_no": "ƏL-2024-000123"}},
     "p2": {"sub": "mg-0002", "pin": "5XYZ9K1", "given_name": "Elvin", "family_name": "Sadıqov", "birthdate": "1995-09-03",
            "phone": "+994 55 000 00 02", "disability": {"registered": False}},
+    "p4": {"sub": "mg-0004", "pin": "6QRS2T5", "given_name": "Nərmin", "family_name": "Əhmədova", "birthdate": "2001-06-18",
+           "phone": "+994 77 000 00 04",
+           # Arayış yenicə verilib, profil qeydi hələ yenilənməyib — nömrə ilə yoxlama ssenarisi
+           "disability": {"registered": False}},
     "p3": {"sub": "mg-0003", "pin": "3LMN4P8", "given_name": "Gülnarə", "family_name": "Həsənova", "birthdate": "1951-01-27",
            "phone": "+994 70 000 00 03",
            "disability": {"registered": True, "group": "I", "category": "mobility", "valid_until": "Müddətsiz",
                           "certificate_no": "ƏL-2019-004567"}},
 }
+
+
+# Əlillik arayışları reyestri (uydurma). Real sistemdə: myGov-un sənəd yoxlama xidməti.
+CERTIFICATES = {
+    "ƏL-2024-000123": {"holder_sub": "mg-0001", "group": "II", "valid_until": "2028-12-31", "status": "active"},
+    "ƏL-2019-004567": {"holder_sub": "mg-0003", "group": "I", "valid_until": "Müddətsiz", "status": "active"},
+    "ƏL-2026-000777": {"holder_sub": "mg-0004", "group": "III", "valid_until": "2027-11-01", "status": "active"},
+    "ƏL-2020-000999": {"holder_sub": "mg-0002", "group": "III", "valid_until": "2023-01-01", "status": "expired"},
+}
+
+
+def _normalize_cert(no: str) -> str:
+    return no.strip().upper().replace("EL-", "ƏL-").replace("ӘL-", "ƏL-")
 
 
 def _s256(verifier: str) -> str:
@@ -114,6 +131,16 @@ h1{{font-size:20px;margin:0 0 6px}} p{{color:#4A5868;font-size:14px;margin:0 0 1
         access = secrets.token_urlsafe(32)
         tokens[access] = {"persona": entry["persona"], "exp": time.time() + TOKEN_TTL_S}
         return {"access_token": access, "token_type": "Bearer", "expires_in": TOKEN_TTL_S, "scope": "openid profile disability"}
+
+    @app.get("/certificates/{certificate_no}")
+    def certificate_lookup(certificate_no: str, x_client_id: str = Header(default=""), x_client_secret: str = Header(default="")):
+        """Serverdən-serverə: arayışın mövcudluğu, sahibi və etibarlılığı (yalnız qeydiyyatlı client üçün)."""
+        if x_client_id != CLIENT_ID or x_client_secret != CLIENT_SECRET:
+            raise HTTPException(401, "invalid_client")
+        cert = CERTIFICATES.get(_normalize_cert(certificate_no))
+        if not cert:
+            return {"found": False}
+        return {"found": True, "certificate_no": _normalize_cert(certificate_no), **cert}
 
     @app.get("/userinfo")
     def userinfo(authorization: str = Header(default="")):

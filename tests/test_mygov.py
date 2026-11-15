@@ -189,18 +189,108 @@ def test_login_without_device_id_creates_generated_id(client):
 # ---------------------------------------------------------------------------
 # Arayış yükləmə
 # ---------------------------------------------------------------------------
-def test_upload_pdf_with_mygov_record_is_verified(client, ctx, uploads):
+def test_upload_never_auto_verifies_even_with_mygov_record(client, ctx, uploads):
+    """Fayl heç vaxt avtomatik təsdiq etmir: məzmunu sistem yoxlaya bilmir -> yalnız dispetçer yoxlaması."""
     token = mygov_login(client, "p1", device_id=cid(10))
     r = upload(client, token, PDF, "application/pdf")
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["disability_status"] == "verified"
+    assert body["disability_status"] == "pending_review"
     assert body["certificate_uploaded"] is True and body["disability_enabled"] is True
     row = account(ctx, cid(10))
-    assert row["verified_by"] == "mygov" and row["certificate_mime"] == "application/pdf"
-    assert row["certificate_file"].endswith(".pdf")
+    assert row["verified_by"] is None and row["certificate_mime"] == "application/pdf"
     assert (uploads / row["certificate_file"]).read_bytes() == PDF
     assert ctx.db.one("SELECT role FROM citizen_profiles WHERE citizen_id=?", (cid(10),))["role"] == "priority_citizen"
+
+
+def test_confirm_with_mygov_record_verifies_without_any_file(client, ctx):
+    """myGov profil qeydi olan şəxs "Təsdiq et" basanda fayl tələb olunmadan təsdiqlənir (mənbə: myGov)."""
+    token = mygov_login(client, "p1", device_id=cid(12))
+    assert client.get("/api/v1/me", headers=bearer(token)).json()["disability_status"] == "mygov_record"
+    body = client.put("/api/v1/me/disability", headers=bearer(token), json={"enabled": True}).json()
+    assert body["disability_status"] == "verified" and body["verified_by"] == "mygov_record"
+    assert body["certificate_uploaded"] is False
+
+
+def test_confirm_without_mygov_record_is_only_declared(client):
+    token = mygov_login(client, "p2", device_id=cid(13))
+    body = client.put("/api/v1/me/disability", headers=bearer(token), json={"enabled": True}).json()
+    assert body["disability_status"] == "declared"
+
+
+def test_upload_after_mygov_verification_keeps_verified(client):
+    token = mygov_login(client, "p1", device_id=cid(14))
+    client.put("/api/v1/me/disability", headers=bearer(token), json={"enabled": True})
+    assert upload(client, token, PDF, "application/pdf").json()["disability_status"] == "verified"
+
+
+VERIFY = "/api/v1/me/disability/verify"
+
+
+def test_certificate_number_verified_by_mygov_registry(client, ctx):
+    """p4: profil qeydi yoxdur, amma arayış reyestrdə var və ona aiddir -> verified."""
+    token = mygov_login(client, "p4", device_id=cid(15))
+    assert client.get("/api/v1/me", headers=bearer(token)).json()["prompt_pending"] is False
+    r = client.post(VERIFY, headers=bearer(token), json={"certificate_no": "ƏL-2026-000777"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["disability_status"] == "verified" and body["verified_by"] == "mygov_certificate"
+    assert body["certificate"]["group"] == "III"
+    assert ctx.db.one("SELECT role FROM citizen_profiles WHERE citizen_id=?", (cid(15),))["role"] == "priority_citizen"
+
+
+def test_certificate_number_accepts_latin_el_prefix_and_spaces(client):
+    token = mygov_login(client, "p4", device_id=cid(16))
+    r = client.post(VERIFY, headers=bearer(token), json={"certificate_no": " el-2026-000777 "})
+    assert r.status_code == 200 and r.json()["disability_status"] == "verified"
+
+
+def test_someone_elses_certificate_is_rejected(client):
+    """p2 başqasının (p1-in) real arayış nömrəsini daxil edir -> rədd, status dəyişmir."""
+    token = mygov_login(client, "p2", device_id=cid(17))
+    r = client.post(VERIFY, headers=bearer(token), json={"certificate_no": "ƏL-2024-000123"})
+    assert r.status_code == 422 and r.json()["detail"] == "certificate_not_owner"
+    assert client.get("/api/v1/me", headers=bearer(token)).json()["disability_status"] == "none"
+
+
+def test_unknown_certificate_number_is_rejected(client):
+    token = mygov_login(client, "p2", device_id=cid(18))
+    r = client.post(VERIFY, headers=bearer(token), json={"certificate_no": "ƏL-0000-000000"})
+    assert r.status_code == 422 and r.json()["detail"] == "certificate_not_found"
+
+
+def test_expired_certificate_is_rejected(client):
+    token = mygov_login(client, "p2", device_id=cid(19))
+    r = client.post(VERIFY, headers=bearer(token), json={"certificate_no": "ƏL-2020-000999"})
+    assert r.status_code == 422 and r.json()["detail"] == "certificate_expired"
+
+
+def test_certificate_verify_requires_citizen_token_and_valid_input(client, auth_headers):
+    assert client.post(VERIFY, json={"certificate_no": "ƏL-2026-000777"}).status_code == 401
+    assert client.post(VERIFY, headers=auth_headers, json={"certificate_no": "ƏL-2026-000777"}).status_code == 401
+    token = mygov_login(client, "p4", device_id=cid(20))
+    assert client.post(VERIFY, headers=bearer(token), json={"certificate_no": "x"}).status_code == 422
+    assert client.post(VERIFY, headers=bearer(token), json={"certificate_no": "<script>alert(1)</script>"}).status_code == 422
+
+
+def test_certificate_verify_is_rate_limited(client, monkeypatch):
+    """Nömrələri sınamaqla (brute force) təsdiq almaq olmaz."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "rate_limit_login_per_min", 3)
+    token = mygov_login(client, "p2", device_id=cid(21))
+    codes = [client.post(VERIFY, headers=bearer(token), json={"certificate_no": f"ƏL-1999-{i:06d}"}).status_code for i in range(5)]
+    assert codes[:3] == [422, 422, 422] and 429 in codes[3:]
+
+
+def test_certificate_verify_attempts_are_audited(client, ctx):
+    token = mygov_login(client, "p2", device_id=cid(22))
+    client.post(VERIFY, headers=bearer(token), json={"certificate_no": "ƏL-2024-000123"})
+    row = ctx.db.one("SELECT details FROM audit_log WHERE action='certificate_verify' ORDER BY id DESC LIMIT 1")
+    assert row and "not_owner" in row["details"]
+
+
+def test_mock_registry_requires_client_credentials(client):
+    assert client.get("/mock-mygov/certificates/ƏL-2024-000123").status_code == 401
 
 
 def test_upload_png_without_record_goes_to_review_then_approve(client, ctx, auth_headers):
@@ -533,7 +623,7 @@ def test_anonymous_unregistered_citizen_unaffected(client, ctx):
 def test_dispatch_sos_shows_verification(client, ctx, auth_headers):
     reg = cid(40)
     token = mygov_login(client, "p1", device_id=reg)
-    assert upload(client, token, PDF, "application/pdf").status_code == 200
+    assert client.put("/api/v1/me/disability", headers=bearer(token), json={"enabled": True}).status_code == 200
     r = client.post(SOS, json={"citizen_id": reg, "type": "medical", "lat": 40.383, "lon": 49.9}, headers=bearer(token))
     assert r.status_code == 201 and r.json()["sos"]["priority"] == 1
     assert send_sos(client, cid(41)).status_code == 201
