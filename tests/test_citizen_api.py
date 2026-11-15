@@ -8,8 +8,7 @@ import pytest
 from app.config import settings
 from app.services import evacuation
 
-from .helpers import (DISPATCH, EVAC, SOS, STATUS, all_route_edges, cid, district_point, plan_with_edges, send_sos,
-                      shelter_row)
+from .helpers import DISPATCH, EVAC, SOS, STATUS, all_route_edges, cid, plan_with_edges, send_sos, shelter_row
 
 
 # ---------------------------------------------------------------------------
@@ -174,8 +173,6 @@ def test_all_shelters_full_recommends_least_occupied(client, ctx):
     assert plan["recommended"]["shelter_id"] == "sh09"
 
 
-@pytest.mark.xfail(strict=False, reason="BUG: shelters.decorate() faizi 1 onluğa yuvarlaqlaşdırıb müqayisə edir: "
-                                        "89.97% -> 90.0 sayılır və məntəqə vaxtından əvvəl 'dolu' olur")
 def test_reroute_threshold_not_triggered_below_90_pct(client, auth_headers):
     # sh01: 6000 yer, 5398 nəfər = 89.97% (< 90%) -> hələ qəbul etməlidir
     r = client.patch(f"{DISPATCH}/shelters/sh01", json={"occupancy": 5398}, headers=auth_headers)
@@ -267,14 +264,15 @@ def test_road_reopen_restores_route(client, auth_headers):
     assert client.get("/api/v1/roads").json()["closures"] == []
 
 
-def test_external_road_closure_is_synced_and_avoided(client, ctx, auth_headers, sim):
+def test_external_road_closure_is_synced_and_avoided(client, ctx, sim):
     """Xarici API yolu bağlayır -> sinxronizasiyadan sonra marşrut həmin yoldan keçmir."""
     me = cid(9)
     plan, (lat, lon) = plan_with_edges(client, me)
     edge = plan["recommended"]["route"]["edge_ids"][0]
-    r = client.post(f"{DISPATCH}/demo/scenario", json={"name": "road_close", "edge_id": edge}, headers=auth_headers)
-    assert r.status_code == 200 and r.json()["edge_id"] == edge
+    # fon dövrü yoxdur: xarici tərəfdə yolu bağlayıb sinxronizasiyanı özümüz çağırırıq
+    client.portal.call(ctx.routing.sim, f"roads/{edge}/close", {"reason": "Qəza"})
     assert edge in sim["closures"]
+    assert edge not in ctx.routing.closed_edges                      # hələ sinxronlaşmayıb
 
     assert client.portal.call(ctx.routing.sync_traffic) is True      # dəyişiklik aşkarlandı
     assert client.portal.call(ctx.routing.sync_traffic) is False     # ikinci dəfə dəyişiklik yoxdur
@@ -285,6 +283,25 @@ def test_external_road_closure_is_synced_and_avoided(client, ctx, auth_headers, 
     assert edge not in all_route_edges(new)
     closures = client.get("/api/v1/roads").json()["closures"]
     assert closures[0]["edge_id"] == edge and closures[0]["source"] == "external"
+    assert closures[0]["reason"] == "Qəza"
+
+
+def test_demo_road_close_scenario_reroutes_citizen(client, ctx, auth_headers, sim, events):
+    """Demo ssenari ilə (xarici tərəfdə) bağlanan yol vətəndaşın marşrutundan çıxarılır."""
+    me = cid(9)
+    plan, (lat, lon) = plan_with_edges(client, me)
+    edge = plan["recommended"]["route"]["edge_ids"][0]
+    r = client.post(f"{DISPATCH}/demo/scenario", json={"name": "road_close", "edge_id": edge}, headers=auth_headers)
+    assert r.status_code == 200 and r.json()["edge_id"] == edge
+    assert edge in sim["closures"]
+    # ssenari özü sinxronlaşdıra bilər; etməyibsə, burada edirik
+    client.portal.call(ctx.routing.sync_traffic)
+    rerouted = r.json().get("rerouted", 0) + client.portal.call(evacuation.reevaluate_plans, ctx)
+    assert rerouted >= 1
+    assert edge in ctx.routing.closed_edges
+    assert [e["citizen_id"] for e in events if e["event"] == "reroute"] == [me]
+    new = client.get(EVAC, params={"lat": lat, "lon": lon, "citizen_id": me}).json()
+    assert edge not in all_route_edges(new)
 
 
 # ---------------------------------------------------------------------------
@@ -453,8 +470,6 @@ def test_safe_checkin_reaching_90_pct_reroutes_others(client, ctx, events):
     assert [e["citizen_id"] for e in events if e["event"] == "reroute"] == [walker]
 
 
-@pytest.mark.xfail(strict=False, reason="BUG: sos.set_status — 'safe' -> yeni SOS -> yenidən 'safe' eyni məntəqədə "
-                                        "vətəndaşı iki dəfə sayır (create_sos shelter_id-ni NULL edir, doluluq azalmır)")
 def test_safe_sos_safe_does_not_double_count(client, ctx):
     me = cid(1)
     before = shelter_row(ctx, "sh09")["occupancy"]

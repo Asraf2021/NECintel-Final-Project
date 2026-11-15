@@ -30,7 +30,7 @@ def create_sos(ctx: AppContext, citizen_id: str, sos_type: str, lat: float, lon:
         sos_id = cur.lastrowid
         ctx.db.execute(
             "INSERT INTO citizen_status (citizen_id,status,lat,lon,updated_at) VALUES (?,?,?,?,?)"
-            " ON CONFLICT(citizen_id) DO UPDATE SET status='sos', shelter_id=NULL, lat=excluded.lat,"
+            " ON CONFLICT(citizen_id) DO UPDATE SET status='sos', lat=excluded.lat,"
             " lon=excluded.lon, updated_at=excluded.updated_at", (citizen_id, "sos", lat, lon, now))
     sos = _sos_out(ctx, ctx.db.one("SELECT * FROM sos_signals WHERE id=?", (sos_id,)))
     ctx.bus.publish("sos_new", {"sos": sos}, channel="ops")
@@ -53,7 +53,8 @@ def set_status(ctx: AppContext, citizen_id: str, status: str, shelter_id: str | 
     checked_in = None
     with ctx.db.transaction():
         prev = ctx.db.one("SELECT * FROM citizen_status WHERE citizen_id=?", (citizen_id,))
-        prev_shelter = prev["shelter_id"] if prev and prev["status"] == "safe" else None
+        # Vətəndaşın hazırda sayıldığı məntəqə (statusundan asılı olmayaraq) — ikiqat sayılmanın qarşısı alınır
+        prev_shelter = prev["shelter_id"] if prev else None
         new_shelter = shelter_id if status == "safe" else None
         if new_shelter and not ctx.db.one("SELECT id FROM shelters WHERE id=? AND status='open'", (new_shelter,)):
             new_shelter = None

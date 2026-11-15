@@ -12,7 +12,7 @@ from app.core.security import (RateLimiter, create_token, decode_token, has_perm
                                role_permissions, verify_password)
 from app.schemas import SosCreate
 
-from .helpers import DISPATCH, EVAC, SOS, cid, send_sos
+from .helpers import DISPATCH, EVAC, SOS, STATUS, cid, send_sos
 
 # (metod, yol, gövdə) — bütün qorunan dispetçer endpoint-ləri
 PROTECTED = [
@@ -273,8 +273,6 @@ def test_oversize_body_rejected_413(client, ctx):
     assert client.post(SOS, json=payload).status_code == 422
 
 
-@pytest.mark.xfail(strict=False, reason="BUG (kiçik): main.harden 413 cavabını təhlükəsizlik başlıqları "
-                                        "əlavə olunmadan qaytarır (erkən return)")
 def test_oversize_response_has_security_headers(client):
     r = client.post(SOS, content=b"x" * (65 * 1024), headers={"Content-Type": "application/json"})
     assert r.status_code == 413
@@ -282,8 +280,6 @@ def test_oversize_response_has_security_headers(client):
     assert "Content-Security-Policy" in r.headers
 
 
-@pytest.mark.xfail(strict=False, reason="ZƏİFLİK: main.harden yalnız Content-Length başlığını yoxlayır; "
-                                        "chunked (Content-Length-siz) böyük gövdə 413 almır və tam oxunur")
 def test_oversize_chunked_body_rejected_413(client):
     body = json.dumps({"citizen_id": cid(1), "type": "fire", "lat": 40.4, "lon": 49.9,
                        "note": "A" * (200 * 1024)}).encode()
@@ -332,12 +328,9 @@ def test_sql_injection_in_ids_is_rejected(client, ctx, auth_headers):
     assert client.get("/api/v1/citizens/x'%20OR%20'1'='1").status_code == 422
     r = client.patch(f"{DISPATCH}/shelters/sh01'%20OR%20'1'='1", json={"occupancy": 0}, headers=auth_headers)
     assert r.status_code == 404
-    r = client.post(STATUS_URL, json={"citizen_id": cid(1), "status": "safe", "shelter_id": "' OR 1=1 --"})
+    r = client.post(STATUS, json={"citizen_id": cid(1), "status": "safe", "shelter_id": "' OR 1=1 --"})
     assert r.status_code == 200 and r.json()["shelter"] is None
     assert ctx.db.scalar("SELECT COUNT(*) FROM shelters WHERE occupancy=0 AND status='open'") == 0
-
-
-STATUS_URL = "/api/v1/status"
 
 
 def test_note_control_characters_are_stripped(client, ctx):

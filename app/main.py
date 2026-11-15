@@ -42,6 +42,53 @@ SECURITY_HEADERS = {
 }
 
 
+class BodyLimitMiddleware:
+    """ASGI middleware: sorğu gövdəsi həddi aşarsa 413 qaytarır.
+
+    Yalnız Content-Length başlığına güvənmir — chunked axında da baytları sayır.
+    Gövdə kiçik olduğu üçün (≤ 64 KB) əvvəlcə tam oxunur, sonra tətbiqə ötürülür.
+    """
+
+    def __init__(self, app, limit: int):
+        self.app = app
+        self.limit = limit
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope["method"] not in ("POST", "PUT", "PATCH"):
+            return await self.app(scope, receive, send)
+        headers = dict(scope.get("headers") or [])
+        length = headers.get(b"content-length", b"")
+        if length.isdigit() and int(length) > self.limit:
+            return await self._reject(send)
+        chunks, total = [], 0
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            body = message.get("body", b"")
+            total += len(body)
+            if total > self.limit:
+                return await self._reject(send)
+            chunks.append(body)
+            if not message.get("more_body", False):
+                break
+        replayed = False
+
+        async def replay():
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+    @staticmethod
+    async def _reject(send):
+        response = JSONResponse({"detail": "payload_too_large"}, status_code=413, headers=SECURITY_HEADERS)
+        await response({"type": "http"}, None, send)
+
+
 def _external_client() -> httpx.AsyncClient:
     """Xarici API müştərisi. URL verilməyibsə, simulyator eyni prosesdə (şəbəkəsiz) çağırılır."""
     if settings.external_api_url:
@@ -101,15 +148,15 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
 
     @app.middleware("http")
     async def harden(request: Request, call_next):
-        length = request.headers.get("content-length")
-        if length and length.isdigit() and int(length) > MAX_BODY_BYTES:
-            return JSONResponse({"detail": "payload_too_large"}, status_code=413)
         response = await call_next(request)
         for k, v in SECURITY_HEADERS.items():
             response.headers.setdefault(k, v)
         if request.url.path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
         return response
+
+    # Ən xarici qat: gövdə ölçüsü həddi (Content-Length və chunked axın üçün eyni qayda)
+    app.add_middleware(BodyLimitMiddleware, limit=MAX_BODY_BYTES)
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):

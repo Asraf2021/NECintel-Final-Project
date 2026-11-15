@@ -45,7 +45,7 @@ def test_outage_falls_back_to_local_routing(client, ctx, auth_headers, sim):
     assert plan["recommended"]["route"]["duration_min"] > 0
     assert len(plan["shelters"]) >= 1 and all("occupancy_pct" in s for s in plan["shelters"])
     assert ctx.routing.fallback_calls == 1
-    assert "503" in ctx.routing.last_error or "HTTPStatusError" in ctx.routing.last_error
+    assert ctx.routing.last_error and "503" in ctx.routing.last_error or "HTTPStatusError" in ctx.routing.last_error
 
 
 def test_fallback_route_equals_external_route(client, sim):
@@ -91,24 +91,24 @@ def test_breaker_opens_after_threshold_failures(client, ctx, sim, monkeypatch):
     assert health["status"] == "ok" and health["routing"]["breaker"] == "open"
 
 
-def test_breaker_stays_open_until_reset_time(client, ctx, auth_headers, sim):
+def test_breaker_stays_open_until_reset_time(client, ctx, sim):
     sim["outage"] = "error"
     for i in range(settings.breaker_fail_threshold):
         _plan(client, i)
-    _scenario(client, auth_headers, "api_restore")
-    assert sim["outage"] == "off"
-    # API bərpa olunub, amma reset vaxtı hələ keçməyib
+    sim["outage"] = "off"
+    # API bərpa olunub, amma reset vaxtı hələ keçməyib -> xarici API çağırılmır
     assert ctx.routing.status()["breaker"] == "open"
     assert _plan(client, 5)["routing"]["source"] == "fallback"
+    assert client.portal.call(ctx.routing.sync_traffic) is False
 
 
-def test_recovery_after_restore_and_reset(client, ctx, auth_headers, sim):
+def test_recovery_after_restore_and_reset(client, ctx, sim):
     sim["outage"] = "error"
     for i in range(settings.breaker_fail_threshold):
         _plan(client, i)
     assert ctx.routing.status()["breaker"] == "open"
 
-    _scenario(client, auth_headers, "api_restore")
+    sim["outage"] = "off"                                          # xarici API bərpa olundu
     ctx.routing.breaker.reset_s = 0                                # "kifayət qədər vaxt keçdi"
     assert ctx.routing.status()["breaker"] == "half_open"
 
@@ -117,6 +117,23 @@ def test_recovery_after_restore_and_reset(client, ctx, auth_headers, sim):
     st = ctx.routing.status()
     assert st["breaker"] == "closed" and st["provider"] == "external" and st["degraded"] is False
     assert ctx.routing.breaker.failures == 0
+
+
+def test_demo_outage_and_restore_scenarios(client, ctx, auth_headers, sim):
+    """Demo ssenariləri: api_outage -> fallback, api_restore -> yenidən xarici provayder."""
+    _scenario(client, auth_headers, "api_outage")
+    assert sim["outage"] == "error"
+    for i in range(settings.breaker_fail_threshold):
+        assert _plan(client, i)["routing"]["source"] == "fallback"
+    assert ctx.routing.status()["breaker"] == "open"
+    assert ctx.routing.status()["provider"] == "fallback_local"
+
+    _scenario(client, auth_headers, "api_restore")
+    assert sim["outage"] == "off"
+    ctx.routing.breaker.reset_s = 0                                # ssenari breaker-i sıfırlamırsa belə keçid açılır
+    plan = _plan(client, 0)
+    assert plan["routing"] == {"source": "external", "degraded": False}
+    assert ctx.routing.status()["breaker"] == "closed" and ctx.routing.status()["provider"] == "external"
 
 
 def test_half_open_failure_reopens_breaker(client, ctx, sim):
@@ -136,7 +153,7 @@ def test_known_closures_respected_during_outage(client, ctx, auth_headers, sim):
     """Kəsintidən əvvəl məlum olan bağlı yollar (xarici + dispetçer) fallback marşrutunda da nəzərə alınır."""
     plan, (lat, lon) = plan_with_edges(client)
     ext_edge = plan["recommended"]["route"]["edge_ids"][0]
-    client.post(f"{DISPATCH}/demo/scenario", json={"name": "road_close", "edge_id": ext_edge}, headers=auth_headers)
+    client.portal.call(ctx.routing.sim, f"roads/{ext_edge}/close", {"reason": "Qəza"})
     assert client.portal.call(ctx.routing.sync_traffic) is True
 
     mid = client.get(EVAC, params={"lat": lat, "lon": lon}).json()
@@ -145,7 +162,7 @@ def test_known_closures_respected_during_outage(client, ctx, auth_headers, sim):
     if manual_edge:
         client.post(f"{DISPATCH}/roads/{manual_edge}/close", json={}, headers=auth_headers)
 
-    _scenario(client, auth_headers, "api_outage")
+    sim["outage"] = "error"
     assert client.portal.call(ctx.routing.sync_traffic) is False   # kəsinti: son məlum vəziyyət saxlanılır
     assert ext_edge in ctx.routing.external_closures
 

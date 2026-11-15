@@ -126,10 +126,10 @@ Bunlar **yalnız nümayiş üçün** hesablardır. Parollar `UCE_DISPATCHER_PASS
 1. **İki pəncərə açın.** Birində `http://localhost:8000/citizen`, digərində `http://localhost:8000/dispatcher`. Dispetçer panelinə `dispatcher` / `dispatcher123` ilə daxil olun.
 2. **Vətəndaş: rayon seçin** (və ya xəritədə klikləyin). Ən yaxın toplanış məntəqələri doluluq faizi ilə, tövsiyə olunan məntəqə isə marşrutu, məsafəsi və piyada müddəti ilə görünür.
 3. **Vətəndaş: SOS düyməsini basın** və təhlükə növünü seçin. Siqnal dərhal dispetçer panelinin xəritəsində və SOS siyahısında görünür.
-4. **Dispetçer: "Simulyasiya" → "SOS klasteri".** Seçilmiş (seçilməyibsə — təsadüfi) rayonda 4 fərqli vətəndaşdan siqnal yaradılır → qırmızı **"Qırmızı Həyəcan"** kartı çıxır. Kartdakı təsdiq düyməsini bir dəfə basın: ən yaxın uyğun briqada göndərilir, ən yaxın ehtiyat toplanış məntəqəsi açılır (vətəndaş xəritəsində də görünür). Düyməni təkrar basmaq heç nəyi təkrarlamır.
-5. **Dispetçer: "Simulyasiya" → "Məntəqəni doldur".** Ssenari göstərilən məntəqəni (göstərilməyibsə — hazırda qəbul edən ən dolu açıq məntəqəni) 97%-ə çatdırır. Planı həmin məntəqəyə yönəlmiş vətəndaşlara **avtomatik alternativ marşrut** göndərilir (vətəndaş pəncərəsində xəbərdarlıq zolağı), doluluq 95%-i keçdiyi üçün paneldə ikinci növ "Qırmızı Həyəcan" da yaranır.
-6. **Dispetçer: "Yolu bağla".** Vətəndaşın marşrutunun keçdiyi yol bağlandıqda ona yeni marşrut göndərilir. Dispetçerin birbaşa bağladığı yol dərhal, "Simulyasiya" menyusundan bağlanan yol isə (xarici API tərəfində bağlanır) növbəti sinxronizasiyada — ən çoxu 4 saniyəyə nəzərə alınır.
-7. **Dispetçer: "Simulyasiya" → "Xarici API kəsintisi".** Xarici API 503 qaytarmağa başlayır. Marşrutlar fasiləsiz qurulmağa davam edir — bu dəfə lokal Dijkstra ilə, son məlum bağlı yollar nəzərə alınmaqla; plan cavabında `routing.source = "fallback"` olur. Ardıcıl 3 uğursuz çağırışdan sonra (fon sinxronizasiyası 4 saniyədən bir işlədiyi üçün ən çoxu təxminən 12 saniyə; marşrut sorğuları bunu sürətləndirir) circuit breaker açılır və ehtiyat rejimi zolağı görünür. "Xarici API bərpası" seçildikdə sistem ən çoxu təxminən 20 saniyəyə özü normal rejimə qayıdır.
+4. **Dispetçer: "Simulyasiya" → "SOS klasteri yarat (4 siqnal)".** Təsadüfi rayonda ~300 m radiusda 4 fərqli vətəndaşdan siqnal yaradılır → ekranın yuxarısında səs siqnalı ilə qırmızı **"Qırmızı Həyəcan: Əlavə Xilasetmə Briqadası Göndər və Yeni Toplanış Nöqtəsi Aç"** zolağı çıxır. **"Bir kliklə təsdiqlə"** düyməsini basın: ən yaxın uyğun briqada göndərilir (xəritədə hədəfə xətt), ən yaxın ehtiyat toplanış məntəqəsi açılır (vətəndaş pəncərəsində "Yeni toplanış məntəqəsi açıldı" bildirişi). Düyməni təkrar basmaq heç nəyi təkrarlamır.
+5. **Dispetçer: "Simulyasiya" → "Məntəqəni 97% doldur".** Ən çox vətəndaşa tövsiyə olunan açıq məntəqə (belə yoxdursa — qəbul edən ən dolu məntəqə) 97%-ə çatdırılır. Planı həmin məntəqəyə yönəlmiş vətəndaşlara **dərhal avtomatik alternativ marşrut** göndərilir (vətəndaş pəncərəsində sarı "Marşrut dəyişdirildi" zolağı), doluluq 95%-i keçdiyi üçün paneldə ikinci növ "Qırmızı Həyəcan" da yaranır.
+6. **Dispetçer: "Simulyasiya" → "Təxliyə marşrutundakı yolu bağla"** (və ya xəritədə istənilən yola klikləyib **"Yolu bağla"**). Simulyasiya aktiv təxliyə marşrutlarında ən çox istifadə olunan yolu Xarici API tərəfində bağlayır və vəziyyəti dərhal sinxronlaşdırır; təsirlənən vətəndaşlar yeni marşrut alır, bağlı yol xəritədə qırmızı qırıq xətlə görünür.
+7. **Dispetçer: "Simulyasiya" → "Xarici API kəsintisi".** Xarici API 503 qaytarmağa başlayır, circuit breaker dərhal açılır, panelin yuxarısında **"Xəritə API: KƏSİNTİ — lokal ehtiyat rejim"**, vətəndaş tətbiqində "Ehtiyat rejim" zolağı görünür. Marşrutlar fasiləsiz qurulmağa davam edir — lokal Dijkstra ilə, son məlum bağlı yollar nəzərə alınmaqla (plan cavabında `routing.source = "fallback"`). **"Xarici API-ni bərpa et"** seçildikdə sistem dərhal normal rejimə qayıdır.
 8. **"Sıfırla".** Bütün məlumat ilkin vəziyyətə qaytarılır, bağlı yollar açılır.
 
 > Təsdiqdən sonra eyni rayon üçün 5 dəqiqə ərzində yeni SOS-klaster həyəcanı yaradılmır (cooldown). Ssenarini təkrar göstərmək üçün başqa rayon seçin və ya "Sıfırla" əməliyyatından istifadə edin.
@@ -434,7 +434,19 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-<!-- TEST_SUMMARY -->
+**Nəticə (15.11.2026):** `245 passed in 5.95s` — 245 test, hamısı uğurlu.
+
+| Fayl | Test | Nəyi yoxlayır |
+|---|---|---|
+| `tests/test_graph.py` | 16 | Dijkstra, bağlı yoldan yayınma, sıxlıq, əlaqəsiz təyinat, haversine |
+| `tests/test_citizen_api.py` | 66 | məntəqələr, təxliyə planı, 90% qaydası, avtomatik yenidən marşrut (doluluq və yol bağlanması), SOS, təkrar klik, "Təhlükəsizəm" |
+| `tests/test_crisis.py` | 30 | 3 vs 4 vətəndaş, eyni vətəndaş, zona və 500 m radius, 5 dəqiqəlik pəncərə, dəqiq 95% vs 95%-dən yuxarı, rayon sərhədində tək həyəcan, təsdiqin idempotentliyi, audit |
+| `tests/test_dispatcher_api.py` | 19 | icmal (KPI, 8 zona, 30 dəqiqəlik qrafik), briqada təyini, yollar, audit, demo ssenariləri |
+| `tests/test_security.py` | 91 | 15 qorunan endpoint-də 401/403, saxta / vaxtı keçmiş / `alg=none` token, rate limit, başlıqlar, 413 (Content-Length və chunked), SQL injection, parol heşi |
+| `tests/test_resilience.py` | 17 | xarici API kəsintisində ehtiyat marşrut, circuit breaker, bərpa, kəsinti zamanı bağlı yolların nəzərə alınması |
+| `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
+
+Testlər sərhəd dəyərlərini dəqiq yoxlayır. Test yazılarkən 5 real qüsur aşkarlandı və düzəldildi: faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi (məs. 95,02% → 95,0 → həyəcan yaranmırdı), bir vətəndaşın məntəqədə iki dəfə sayılması, rayon sərhədindəki 500 m-lik klaster üçün ikinci həyəcan, 413 cavabında təhlükəsizlik başlıqlarının olmaması, chunked gövdədə ölçü həddinin yoxlanmaması.
 
 Yük testi (server işlək vəziyyətdə olmalıdır):
 
@@ -442,7 +454,17 @@ Yük testi (server işlək vəziyyətdə olmalıdır):
 python scripts/load_test.py --url http://127.0.0.1:8000 --users 200 --duration 15
 ```
 
-<!-- LOAD_RESULT -->
+**Nəticə** (4 nüvəli maşın, 1 uvicorn prosesi, yük generatoru eyni maşında, rate limit test üçün qaldırılıb, 200 virtual istifadəçi, 15 s):
+
+| Endpoint | Sorğu | Xəta | p50 | p95 | p99 |
+|---|---|---|---|---|---|
+| `GET /api/v1/evacuation` | 4 996 | 0 | 123 ms | 270 ms | 389 ms |
+| `GET /api/v1/shelters` | 2 360 | 0 | 149 ms | 277 ms | 327 ms |
+| `POST /api/v1/sos` | 423 | 0 | 176 ms | 319 ms | 374 ms |
+| `POST /api/v1/status` | 593 | 0 | 146 ms | 251 ms | 302 ms |
+| **Cəmi** | **8 372** | **0 (0,00%)** | 135 ms | 279 ms | 368 ms |
+
+Ötürücülük **~543 sorğu/s**, xəta yoxdur. Bu ölçü doyma nöqtəsindədir (gecikmənin əsas hissəsi növbədir). Eyni 200 istifadəçi daha real tempdə (`--think 1.0`) — 172 sorğu/s, p50 **2,9 ms**, p95 8,3 ms, p99 16,2 ms, xəta yoxdur. Testdən sonra marşrut keşi 4 210 sorğunu təkrar hesablamadan cavablandırıb.
 
 ---
 

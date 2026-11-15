@@ -215,8 +215,6 @@ def test_no_new_alert_during_cooldown_after_decision(client, ctx, auth_headers):
     assert len(alerts(ctx)) == 1 and alerts(ctx)[0]["status"] == "dismissed"
 
 
-@pytest.mark.xfail(strict=False, reason="BUG: crisis.evaluate_sos_cluster gözləyən həyəcanı yalnız SON siqnalın rayonu "
-                                        "üzrə axtarır; rayon sərhədindəki eyni 500 m klaster üçün ikinci həyəcan yaranır")
 def test_radius_cluster_on_border_creates_single_alert(client, ctx):
     (_, pa), (_, pb) = border_points(ctx)
     for n, p in enumerate([pa, pa, pb, pb], start=1):
@@ -283,9 +281,6 @@ def test_occupancy_is_clamped_to_capacity(client, ctx, auth_headers):
     assert client.patch(f"{DISPATCH}/shelters/sh07", json={"occupancy": -1}, headers=auth_headers).status_code == 422
 
 
-@pytest.mark.xfail(strict=False, reason="BUG: shelters.decorate() faizi round(…, 1) ilə yuvarlaqlaşdırır, "
-                                        "crisis.evaluate_shelter isə yuvarlaq dəyəri 95 ilə müqayisə edir: "
-                                        "95.02% -> 95.0 -> həyəcan yaranmır")
 def test_slightly_above_95_pct_on_large_shelter_alerts(client, ctx, auth_headers):
     # sh01: 6000 yer, 5701 nəfər = 95.017% (> 95%) -> həyəcan olmalıdır
     client.patch(f"{DISPATCH}/shelters/sh01", json={"occupancy": 5701}, headers=auth_headers)

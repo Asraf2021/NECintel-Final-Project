@@ -9,6 +9,7 @@ Dayanıqlılıq nümunələri:
 """
 from __future__ import annotations
 
+import asyncio
 import time
 
 import httpx
@@ -109,8 +110,10 @@ class RoutingService:
         last_exc: Exception | None = None
         for _ in range(settings.external_retries + 1):
             try:
-                resp = await self.client.request(method, path, headers=self.headers,
-                                                 timeout=settings.external_timeout_s, **kwargs)
+                # wait_for: in-process (ASGI) transportda da sərt timeout təmin olunur
+                resp = await asyncio.wait_for(
+                    self.client.request(method, path, headers=self.headers, timeout=settings.external_timeout_s, **kwargs),
+                    timeout=settings.external_timeout_s + 0.5)
                 resp.raise_for_status()
                 self.breaker.success()
                 self.external_calls += 1

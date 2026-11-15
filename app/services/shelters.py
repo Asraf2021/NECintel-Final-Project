@@ -9,19 +9,21 @@ from ..context import AppContext
 
 def decorate(s: dict) -> dict:
     """Doluluq faizi və səviyyəsini əlavə edir."""
-    pct = round(s["occupancy"] * 100 / s["capacity"], 1) if s["capacity"] else 100.0
-    if pct > settings.shelter_critical_pct:
+    # Hədlər yuvarlaqlaşdırılmamış dəqiq faizlə müqayisə olunur; yuvarlaqlaşdırma yalnız göstəriş üçündür
+    raw = s["occupancy"] * 100 / s["capacity"] if s["capacity"] else 100.0
+    if raw > settings.shelter_critical_pct:
         level = "critical"
-    elif pct >= settings.shelter_reroute_pct:
+    elif raw >= settings.shelter_reroute_pct:
         level = "full"
-    elif pct >= 70:
+    elif raw >= 70:
         level = "high"
-    elif pct >= 40:
+    elif raw >= 40:
         level = "medium"
     else:
         level = "low"
-    return {**s, "occupancy_pct": pct, "level": level,
-            "accepting": s["status"] == "open" and pct < settings.shelter_reroute_pct}
+    return {**s, "occupancy_pct": round(raw, 1), "level": level,
+            "over_critical": raw > settings.shelter_critical_pct,
+            "accepting": s["status"] == "open" and raw < settings.shelter_reroute_pct}
 
 
 def list_shelters(ctx: AppContext, include_reserve: bool = False) -> list[dict]:

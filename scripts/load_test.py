@@ -136,13 +136,18 @@ async def virtual_user(idx: int, client: httpx.AsyncClient, sem: asyncio.Semapho
             await asyncio.sleep(rng.uniform(0.5, 1.5) * think_s)
 
 
+USERS_PER_CLIENT = 20   # httpx bağlantı hovuzu böyüdükcə yavaşlayır -> istifadəçilər kiçik hovuzlara bölünür
+
+
 async def run(args: argparse.Namespace) -> Stats:
     stats = Stats()
     concurrency = args.concurrency or args.users
-    limits = httpx.Limits(max_connections=concurrency, max_keepalive_connections=concurrency)
-    async with httpx.AsyncClient(base_url=args.url, timeout=args.timeout, limits=limits) as client:
+    n_clients = max(1, math.ceil(args.users / USERS_PER_CLIENT))
+    limits = httpx.Limits(max_connections=USERS_PER_CLIENT, max_keepalive_connections=USERS_PER_CLIENT)
+    clients = [httpx.AsyncClient(base_url=args.url, timeout=args.timeout, limits=limits) for _ in range(n_clients)]
+    try:
         try:
-            health = await client.get("/health")
+            health = await clients[0].get("/health")
             health.raise_for_status()
         except Exception as exc:
             print(f"XƏTA: server əlçatmazdır ({args.url}): {type(exc).__name__}: {exc}", file=sys.stderr)
@@ -150,13 +155,15 @@ async def run(args: argparse.Namespace) -> Stats:
         sem = asyncio.Semaphore(concurrency)
         stats.started = time.perf_counter()
         deadline = stats.started + args.duration
-        await asyncio.gather(*(virtual_user(i, client, sem, stats, deadline, args.think, args.seed)
+        await asyncio.gather(*(virtual_user(i, clients[i % n_clients], sem, stats, deadline, args.think, args.seed)
                                for i in range(args.users)))
         stats.finished = time.perf_counter()
         try:
-            stats.health_after = (await client.get("/health")).json()
+            stats.health_after = (await clients[0].get("/health")).json()
         except Exception:
             stats.health_after = None
+    finally:
+        await asyncio.gather(*(c.aclose() for c in clients), return_exceptions=True)
     return stats
 
 

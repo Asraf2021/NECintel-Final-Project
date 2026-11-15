@@ -78,6 +78,12 @@ def evaluate_sos_cluster(ctx: AppContext, sos: dict) -> dict | None:
         pending = ctx.db.one(
             "SELECT * FROM alerts WHERE kind='sos_cluster' AND district_id=? AND status='pending'",
             (sos["district_id"],))
+        if not pending and trigger == "radius":
+            # Rayon sərhədindəki klaster: eyni 500 m-lik ərazi üçün artıq gözləyən həyəcan varsa, onu yenilə
+            for a in ctx.db.query("SELECT * FROM alerts WHERE kind='sos_cluster' AND status='pending'"):
+                if a["lat"] is not None and haversine_m(lat, lon, a["lat"], a["lon"]) <= settings.sos_cluster_radius_m:
+                    pending = a
+                    break
         if pending:
             ctx.db.execute("UPDATE alerts SET details=?, lat=?, lon=? WHERE id=?",
                            (json.dumps(details), lat, lon, pending["id"]))
@@ -96,7 +102,7 @@ def evaluate_sos_cluster(ctx: AppContext, sos: dict) -> dict | None:
 
 def evaluate_shelter(ctx: AppContext, shelter: dict) -> dict | None:
     """Qayda B. Doluluq dəyişəndə çağırılır."""
-    if shelter["status"] != "open" or shelter["occupancy_pct"] <= settings.shelter_critical_pct:
+    if shelter["status"] != "open" or not shelter["over_critical"]:
         return None
     details = {"trigger": "occupancy", "occupancy_pct": shelter["occupancy_pct"],
                "occupancy": shelter["occupancy"], "capacity": shelter["capacity"],
