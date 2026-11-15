@@ -376,7 +376,28 @@ JWT (HS256) və müddətli tokenlər, PBKDF2-HMAC-SHA256 parol heşi, icazə əs
 
 ### Drop 1 (12:00)
 
-<!-- DROP_1 -->
+**Tələb:** sistemə "Hərəkət Məhdudiyyətli Şəxs / Xüsusi Qayğıya Ehtiyacı Olan Vətəndaş" (Prioritet SOS) rolu əlavə edilsin; bu rolun SOS-u avtomatik "Kritik Prioritet" (Priority #1) alsın və ona yalnız əlil arabası / tibbi nəqliyyat üçün əlçatan (panduslu, maneəsiz) təxliyə marşrutu təyin olunsun. Bütün interfeys Azərbaycan və ingilis dillərində dinamik dəyişdirilə bilsin.
+
+**Necə uyğunlaşdıq (≈ 35 dəqiqə, mövcud arxitektura sındırılmadan):**
+
+| Dəyişiklik | Harada | Niyə asan oldu |
+|---|---|---|
+| Vətəndaş rolları reyestri: `citizen` və `priority_citizen`. Rol məlumat kimi təsvir olunur: SOS prioriteti, marşrut profili, məntəqə şərti, briqada tələbi | `app/core/roles.py` | Yeni rol = reyestrə bir giriş; servis kodu siyasəti oxuyur (Open/Closed) |
+| Rolun təyini: `PUT /api/v1/citizens/{id}/profile`; vətəndaş tətbiqində "Hərəkət məhdudiyyətim var / xüsusi qayğıya ehtiyacım var" açarı | `app/routers/citizen.py`, `static/js/citizen.js` | Anonim cihaz ID-si artıq vardı |
+| SOS prioriteti **server tərəfində** roldan təyin olunur (müştəri `priority` göndərə bilməz): `priority_citizen` → 1 (Kritik), digərləri → 2. Prioritet SOS dispetçer siyahısında həmişə yuxarıda, bənövşəyi "PRİORİTET #1" nişanı, ayrıca səs siqnalı, KPI kartı, zona riski "Kritik" | `app/services/sos.py`, `analytics.py`, `static/js/dispatcher.js` | SSE hadisə kanalı (`sos_priority`) və icmal artıq vardı |
+| Briqada təyini: prioritet SOS üçün **əlçatan nəqliyyatı olan** (əlil arabası / tibbi) ən yaxın briqada, tibbi üstün tutulur; boş deyilsə — istənilən ən yaxın | `app/services/crisis.py` (`nearest_available_brigade`) | Briqada seçimi artıq bir funksiyada idi — tələb parametri əlavə olundu |
+| Əlçatan marşrut: yol seqmentlərinə `accessible` + `barrier` (pilləkən, yeraltı keçid, dik yoxuş, səki yoxdur), məntəqələrə `accessible` (pandus, maneəsiz giriş) atributu. Marşrut profili `wheelchair` maneəli seqmentləri qrafdan çıxarır; sürət 3 km/saat | `app/data/city.json`, `app/core/graph.py` (`PROFILES`) | Dijkstra artıq "bağlı yol" çoxluğunu qəbul edirdi — maneəli seqmentlər eyni mexanizmlə çıxarılır |
+| Profil Xarici API-yə (`profile` parametri) və lokal ehtiyat marşrutlaşdırıcıya eyni ötürülür — API kəsintisində də yalnız əlçatan marşrut | `external_api/main.py`, `app/services/routing.py` | Adapter + fallback vahid alqoritmi paylaşır |
+| Avtomatik yenidən marşrutlaşdırma (yol bağlanması / 90% doluluq) prioritet vətəndaş üçün yenə yalnız əlçatan variant verir | `app/services/evacuation.py` | Plan saxlanılan rol əsasında yenidən qurulur |
+| Mövcud bazalar üçün sxem miqrasiyası (yeni sütunlar avtomatik əlavə olunur) | `app/core/db.py` (`MIGRATIONS`) | — |
+| **i18n:** bütün UI AZ / EN / RU arasında səhifəni yeniləmədən dəyişir; məlumat adları da tərcümə olunur (məntəqə, briqada, rayon: `name_en`), sənəd başlığı və ekran oxuyucu etiketləri (`aria-label`) də | `static/js/i18n.js`, `static/js/common.js` (`nm()`) | Lüğət arxitekturası əvvəldən vardı; yeni dil = bir lüğət |
+| Simulyasiya menyusuna "Prioritet SOS (hərəkət məhdudiyyətli)" ssenarisi | `app/services/demo.py` | — |
+
+**Testlər:** `tests/test_priority.py` — 48 yeni test: rol reyestri, prioritetin serverdə təyini (müştəri dəyişə bilməz), sıralama, briqada seçimi və ehtiyat variant, hər rayondan əlçatan marşrut (maneəli seqment yoxdur), API kəsintisində əlçatan marşrut, prioritet vətəndaşın avtomatik yenidən marşrutlaşdırılması, köhnə bazanın miqrasiyası, **i18n tamlığı** (AZ/EN/RU açarları və `{parametrlər}` üst-üstə düşür). Cəmi: **293 test, hamısı uğurlu**.
+
+**Demo:** vətəndaş tətbiqində açarı yandırın → "Əlçatan marşrut — panduslu, maneəsiz" nişanı, xəritədə maneələr narıncı nöqtəli xətlə, metro sığınacaqları (pilləkən) əvəzinə əlçatan məntəqə; SOS düyməsində "P1" → dispetçer panelində bənövşəyi "PRİORİTET #1" kartı → "Briqada göndər" əlçatan tibbi nəqliyyatı seçir.
+
+> Məhdudiyyət: prototipdə rol vətəndaşın özü tərəfindən bildirilir. Real sistemdə sosial müdafiə reyestri / ASAN Login ilə təsdiq və dispetçer tərəfindən yoxlanma lazımdır. Əlçatanlıq məlumatları simulyasiyadır.
 
 ### Drop 2 (13:00)
 
