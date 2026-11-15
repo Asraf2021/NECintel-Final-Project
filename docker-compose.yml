@@ -1,0 +1,24 @@
+# Iki servis: əsas tətbiq (frontend + backend + DB) və simulyasiya olunmuş Xarici Xəritə API-si.
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      UCE_EXTERNAL_API_URL: http://external-api:8001
+      UCE_SECRET_KEY: ${UCE_SECRET_KEY:-change-me-in-production}
+      UCE_DISPATCHER_PASSWORD: ${UCE_DISPATCHER_PASSWORD:-dispatcher123}
+      UCE_ADMIN_PASSWORD: ${UCE_ADMIN_PASSWORD:-admin123}
+    volumes:
+      - uce-data:/srv/data
+    depends_on:
+      - external-api
+    restart: unless-stopped
+  external-api:
+    build: .
+    command: ["python", "-m", "uvicorn", "external_api.main:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
+volumes:
+  uce-data:
