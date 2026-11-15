@@ -222,8 +222,23 @@ def set_disability(ctx: AppContext, citizen_id: str, enabled: bool) -> dict:
                        (1 if enabled else 0, status, now, now if verified_now else None,
                         "mygov_record" if verified_now else None, citizen_id))
         ctx.db.audit(citizen_id, "citizen", "disability_toggle", {"enabled": enabled})
-    sos_svc.set_profile(ctx, citizen_id, "priority_citizen" if enabled else "citizen")
+    sync_role(ctx, citizen_id)
     return account_out(get_account(ctx, citizen_id))
+
+
+def priority_allowed(acc: dict | None) -> bool:
+    """Prioritet rol hüququ: əlillik myGov ilə təsdiqlənib və aktivdir."""
+    if not settings.priority_requires_verification:
+        return bool(acc and acc["disability_enabled"])
+    return bool(acc and acc["disability_enabled"] and acc["disability_status"] == "verified")
+
+
+def sync_role(ctx: AppContext, citizen_id: str) -> str:
+    """Rolu hesab vəziyyətindən hesablayır (müştərinin istəyindən yox): təsdiqlənib -> priority_citizen, əks halda citizen."""
+    from . import sos as sos_svc
+    role = "priority_citizen" if priority_allowed(get_account(ctx, citizen_id)) else "citizen"
+    sos_svc.set_profile(ctx, citizen_id, role)
+    return role
 
 
 def skip_prompt(ctx: AppContext, citizen_id: str) -> dict:
@@ -262,8 +277,7 @@ def save_certificate(ctx: AppContext, citizen_id: str, content: bytes, mime: str
         " disability_enabled=1, prompt_done=1, updated_at=? WHERE citizen_id=?",
         (name, mime, now, status, now, citizen_id))
     ctx.db.audit(citizen_id, "citizen", "certificate_upload", {"status": status, "bytes": len(content)})
-    from . import sos as sos_svc
-    sos_svc.set_profile(ctx, citizen_id, "priority_citizen")
+    sync_role(ctx, citizen_id)   # fayl özü prioritet vermir — dispetçer təsdiqindən sonra
     ctx.bus.publish("verification_update", {"citizen_id": citizen_id, "status": status}, channel="ops")
     return account_out(get_account(ctx, citizen_id))
 
@@ -293,7 +307,7 @@ async def verify_certificate_number(ctx: AppContext, provider: MyGovProvider, ci
         "UPDATE citizen_accounts SET disability_status='verified', disability_enabled=1, prompt_done=1,"
         " mygov_disability_group=COALESCE(mygov_disability_group, ?), verified_at=?, verified_by='mygov_certificate',"
         " updated_at=? WHERE citizen_id=?", (result.get("group"), now, now, citizen_id))
-    sos_svc.set_profile(ctx, citizen_id, "priority_citizen")
+    sync_role(ctx, citizen_id)
     ctx.bus.publish("verification_update", {"citizen_id": citizen_id, "status": "verified"}, channel="ops")
     return {**account_out(get_account(ctx, citizen_id)), "certificate": {
         "number": result.get("certificate_no"), "group": result.get("group"), "valid_until": result.get("valid_until")}}
@@ -308,6 +322,7 @@ def review(ctx: AppContext, citizen_id: str, approve: bool, actor: dict) -> dict
     ctx.db.execute("UPDATE citizen_accounts SET disability_status=?, verified_at=?, verified_by=?, updated_at=? WHERE citizen_id=?",
                    (status, now, actor["sub"], now, citizen_id))
     ctx.db.audit(actor["sub"], actor["role"], "verification_" + ("approve" if approve else "reject"), {"citizen_id": citizen_id})
+    sync_role(ctx, citizen_id)
     ctx.bus.publish("verification_update", {"citizen_id": citizen_id, "status": status}, channel="ops")
     ctx.bus.publish("account_update", {"status": status}, citizen_id=citizen_id)
     return account_out(get_account(ctx, citizen_id))

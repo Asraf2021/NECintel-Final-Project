@@ -32,7 +32,7 @@
   }
 
   function storedRole() {
-    try { return localStorage.getItem("uce_role") === "priority_citizen" ? "priority_citizen" : "citizen"; } catch (e) { return "citizen"; }
+    return "citizen";  // rol müştəridə saxlanılmır — myGov hesabından (server) hesablanır
   }
   const isPriority = () => state.role === "priority_citizen";
 
@@ -130,8 +130,22 @@
     }
   }
 
+  // Plan "imzası": vaxt möhürləri xaric. Eyni plan gəlibsə DOM və xəritə yenidən çəkilmir (titrəmə/donma olmasın)
+  function planSignature(p) {
+    return JSON.stringify([p.recommended && p.recommended.shelter_id, p.recommended && p.recommended.route && p.recommended.route.edge_ids,
+      p.routing && p.routing.source, p.routing && p.routing.tier, p.profile,
+      (p.shelters || []).map((s) => [s.id, s.occupancy, s.status, s.accepting, s.route && s.route.duration_min,
+        s.forecast && s.forecast.trend, s.forecast && Math.round(s.forecast.t90_min || 0)])]);
+  }
+
   function applyPlan(plan, opts) {
     opts = opts || {};
+    const sig = planSignature(plan);
+    if (!opts.fit && !plan.rerouted && state.plan && sig === state.planSig && state.selectedId) {
+      state.plan = plan;   // yalnız məlumatı yenilə, ekranı yox
+      return;
+    }
+    state.planSig = sig;
     const prevSelected = state.selectedId;
     const prevRec = state.plan && state.plan.recommended ? state.plan.recommended.shelter_id : null;
     state.plan = plan;
@@ -152,6 +166,7 @@
     state.banners = state.banners.filter((b) => b.kind !== "reroute");
     state.banners.unshift({ kind: "reroute", title: t("reroute.title"), text });
     if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+    expandSheet();   // marşrut dəyişdi — panel avtomatik açılır
     $("panel").scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -370,7 +385,7 @@
 
   // ---------- Rol: Hərəkət məhdudiyyətli / xüsusi qayğı (Challenge Drop 1) ----------
   function renderRole() {
-    $("roleToggle").checked = isPriority();
+    $("roleBadge").hidden = !isPriority();   // yalnız myGov ilə təsdiqlənmiş əlil vətəndaş görür (dəyişmək olmur)
     $("sosBadge").hidden = !isPriority();
     document.body.classList.toggle("is-priority", isPriority());
     renderLegend();
@@ -402,6 +417,53 @@
     setPosition(saved.lat, saved.lon, !saved.district);
   }
 
+  // ---------- Mobil: sürüşən alt panel (Instagram şərhləri kimi) ----------
+  const PEEK = 190;   // yığılmış vəziyyətdə görünən hündürlük (tutacaq + qısa məlumat + düymələr)
+  const mobile = window.matchMedia("(max-width: 899px)");
+  let sheetY = 0, sheetMax = 0;
+  function setSheet(y, animate) {
+    const panel = $("panel");
+    sheetY = Math.max(0, Math.min(y, sheetMax));
+    panel.classList.toggle("is-dragging", !animate);
+    panel.style.transform = mobile.matches ? "translateY(" + sheetY + "px)" : "";
+    const collapsed = sheetY > sheetMax / 2;
+    panel.classList.toggle("is-collapsed", collapsed);
+    $("sheetHandle").setAttribute("aria-expanded", String(!collapsed));
+  }
+  function measureSheet() {
+    sheetMax = mobile.matches ? Math.max(0, $("panel").clientHeight - PEEK) : 0;
+    setSheet(sheetY > 0 ? sheetMax : 0, true);
+  }
+  function expandSheet() { if (mobile.matches) setSheet(0, true); }
+  function initSheet() {
+    const handle = $("sheetHandle");
+    let startY = null, startSheet = 0, moved = 0, lastY = 0, lastT = 0, velocity = 0;
+    handle.addEventListener("pointerdown", (e) => {
+      if (!mobile.matches) return;
+      startY = e.clientY; startSheet = sheetY; moved = 0; lastY = e.clientY; lastT = performance.now(); velocity = 0;
+      handle.setPointerCapture(e.pointerId);
+    });
+    handle.addEventListener("pointermove", (e) => {
+      if (startY === null) return;
+      const dy = e.clientY - startY; moved = Math.max(moved, Math.abs(dy));
+      const now = performance.now(); velocity = (e.clientY - lastY) / Math.max(1, now - lastT); lastY = e.clientY; lastT = now;
+      setSheet(startSheet + dy, false);
+    });
+    const end = () => {
+      if (startY === null) return;
+      startY = null;
+      if (moved < 6) { setSheet(sheetY > sheetMax / 2 ? 0 : sheetMax, true); return; }   // toxunuş = aç/yığ
+      if (Math.abs(velocity) > 0.5) { setSheet(velocity > 0 ? sheetMax : 0, true); return; }  // sürətli sürüşdürmə
+      setSheet(sheetY > sheetMax / 2 ? sheetMax : 0, true);
+    };
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+    handle.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSheet(sheetY > 0 ? 0 : sheetMax, true); } });
+    window.addEventListener("resize", debounce(measureSheet, 150));
+    mobile.addEventListener("change", measureSheet);
+    measureSheet();
+  }
+
   // ---------- myGov hesabı və əlillik təsdiqi ----------
   function handleAuthHash() {
     const h = location.hash || "";
@@ -423,7 +485,7 @@
         state.cid = acc.citizen_id;
         try { localStorage.setItem("uce_cid", acc.citizen_id); } catch (e) { /* ignore */ }
       }
-      const role = acc.disability_enabled ? "priority_citizen" : "citizen";
+      const role = acc.disability_enabled && acc.disability_status === "verified" ? "priority_citizen" : "citizen";
       if (role !== state.role) {
         state.role = role;
         try { localStorage.setItem("uce_role", role); } catch (e) { /* ignore */ }
@@ -488,7 +550,7 @@
   async function confirmDis() {
     try {
       state.account = await api("/me/disability", { method: "PUT", body: { enabled: true } });
-      state.role = "priority_citizen";
+      state.role = state.account.disability_status === "verified" ? "priority_citizen" : "citizen";
       try { localStorage.setItem("uce_role", state.role); } catch (e) { /* ignore */ }
       renderRole(); renderAccount();
       if (state.pos) loadPlan({ fit: true });
@@ -509,7 +571,7 @@
     try {
       const res = await api("/me/disability/verify", { method: "POST", body: { certificate_no: no } });
       state.account = res;
-      state.role = "priority_citizen";
+      state.role = res.disability_status === "verified" ? "priority_citizen" : "citizen";
       try { localStorage.setItem("uce_role", state.role); } catch (e) { /* ignore */ }
       renderRole(); renderAccount();
       if (state.pos) loadPlan({ fit: true });
@@ -566,7 +628,7 @@
   }
 
   // ---------- Canlı hadisələr ----------
-  const refreshPlan = debounce(() => loadPlan(), 400);
+  const refreshPlan = debounce(() => loadPlan(), 900);
   function onEvent(name, data) {
     if (name === "reroute") applyPlan(data.plan, {});
     else if (name === "shelter_update") {
@@ -582,7 +644,7 @@
       if (name === "sos_resolved") toast(t("sos.resolved"));
       loadCitizen();
     } else if (name === "account_update") { loadAccount(false);
-    } else if (name === "reset") { state.banners = []; loadRoads(); loadCitizen(); if (isPriority()) saveRole("priority_citizen", true); else refreshPlan(); }
+    } else if (name === "reset") { state.banners = []; loadRoads(); loadCitizen(); loadAccount(false); refreshPlan(); }
   }
 
   // ---------- Başlanğıc ----------
@@ -622,7 +684,7 @@
     });
     $("sosGrid").addEventListener("click", (e) => { const b = e.target.closest("[data-sos]"); if (b) sendSos(b.dataset.sos); });
     $("safeBtn").addEventListener("click", () => markSafe(null));
-    $("roleToggle").addEventListener("change", (e) => saveRole(e.target.checked ? "priority_citizen" : "citizen"));
+
     $("planBox").addEventListener("click", (e) => {
       const item = e.target.closest("[data-shelter]");
       if (item) return selectShelter(item.dataset.shelter);
@@ -656,10 +718,11 @@
     }
     initMap(); fillDistricts(); renderLegend(); bind(); renderPlan(); renderRole();
     renderAccount();
+    initSheet();
     restorePosition();
     if (state.ctoken) await loadAccount(true);
     // Server bazası sıfırlansa belə rol itməsin: saxlanılmış rol serverə yenidən yazılır
-    if (isPriority()) saveRole("priority_citizen", true);
+    // Prioritet rol yalnız serverdəki təsdiqlənmiş hesabdan gəlir (loadAccount); anonim rejimdə həmişə standart
     loadRoads(); loadCitizen();
     connectStream("/api/v1/stream?citizen_id=" + state.cid + (state.ctoken ? "&token=" + encodeURIComponent(state.ctoken) : ""), onEvent, (s) => { state.conn = s; renderConn(); if (s === "live" && state.pos) refreshPlan(); });
     // SSE kəsilsə belə məlumat köhnəlməsin

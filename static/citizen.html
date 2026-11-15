@@ -26,6 +26,7 @@
     </section>
 
     <aside class="c-panel" id="panel">
+      <button class="sheet-handle" id="sheetHandle" type="button" data-i18n-aria="sheet.toggle" aria-expanded="true"><span></span></button>
       <div id="banners" aria-live="assertive"></div>
       <div id="statusCard"></div>
       <section class="card acc-card" id="accountCard"></section>
@@ -38,11 +39,10 @@
           <button class="btn" id="gpsBtn" type="button"><span id="icoGps"></span><span data-i18n="loc.gps">Mənim yerim</span></button>
         </div>
         <p class="hint" data-i18n="loc.hint">Və ya xəritədə nöqtəyə toxunun</p>
-        <label class="role-toggle" for="roleToggle">
+        <div class="role-toggle role-badge" id="roleBadge" hidden>
           <span class="role-ico" id="icoWheel"></span>
-          <span class="role-text"><b data-i18n="role.priority">Hərəkət məhdudiyyətim var / xüsusi qayğıya ehtiyacım var</b><small data-i18n="role.priority.desc"></small></span>
-          <input type="checkbox" id="roleToggle" class="switch">
-        </label>
+          <span class="role-text"><b data-i18n="role.badge">Prioritet rejim — əlillik myGov ilə təsdiqlənib</b><small data-i18n="role.priority.desc"></small></span>
+        </div>
       </section>
 
       <div id="planBox"></div>

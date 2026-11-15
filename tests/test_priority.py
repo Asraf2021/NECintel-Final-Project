@@ -15,6 +15,14 @@ from app.core.roles import (CITIZEN_ROLES, DEFAULT_CITIZEN_ROLE, PRIORITY_CRITIC
                             citizen_role, role_policy)
 from tests.helpers import DISPATCH, EVAC, SOS, cid, district_point, send_sos, shelter_row
 
+
+@pytest.fixture(autouse=True)
+def _self_declared_priority_allowed(monkeypatch):
+    """Bu fayl prioritet MEXANİKASINI yoxlayır (Drop 1). Təsdiq siyasəti test_mygov.py-də ayrıca yoxlanılır."""
+    from app.config import settings
+    monkeypatch.setattr(settings, "priority_requires_verification", False)
+
+
 ACCESSIBLE_BRIGADES = {"br03", "br04", "br05", "br08"}
 I18N_PATH = Path(__file__).resolve().parent.parent / "static" / "js" / "i18n.js"
 

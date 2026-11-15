@@ -209,3 +209,35 @@
 .act-sos.is-cooldown .act-ring { display: none; }
 .banner-degraded { background: #FFF4DC; border-color: #F3D48A; color: #6B4700; }
 .banner .b-tier { font-size: 12px; opacity: .85; margin-top: 4px; }
+
+/* Prioritet nişanı (dəyişdirilə bilməz; yalnız təsdiqlənmiş əlil vətəndaş) */
+.role-badge { cursor: default; grid-template-columns: 40px 1fr; border-color: #7C3AED; background: #F6F2FF; box-shadow: 0 0 0 3px rgba(124, 58, 237, .15); }
+.role-badge[hidden] { display: none; }
+.role-badge .role-ico { background: #7C3AED; color: #fff; }
+html[data-theme="dark"] .role-badge { background: #241A3D; }
+
+/* Mobil: sürüşən alt panel */
+.sheet-handle { display: none; }
+@media (max-width: 899px) {
+  .c-layout { position: relative; }
+  .c-map { position: absolute; inset: 0; height: auto; min-height: 0; }
+  .c-panel {
+    position: absolute; left: 0; right: 0; bottom: 0; top: 30%; z-index: 1000;
+    background: var(--bg); border-radius: 20px 20px 0 0; box-shadow: 0 -8px 28px rgba(11, 31, 51, .22);
+    padding-top: 0; transition: transform .28s cubic-bezier(.2, .8, .2, 1); will-change: transform;
+    overscroll-behavior: contain;
+  }
+  .c-panel.is-dragging { transition: none; }
+  .sheet-handle {
+    display: grid; place-items: center; position: sticky; top: 0; z-index: 5; width: calc(100% + 28px); margin: 0 -14px 2px;
+    height: 30px; border: 0; background: var(--bg); border-radius: 20px 20px 0 0; cursor: grab; touch-action: none;
+  }
+  .sheet-handle span { width: 44px; height: 5px; border-radius: 999px; background: #B9C4D2; }
+  .sheet-handle:active { cursor: grabbing; }
+  .c-legend { bottom: auto; top: 10px; }
+}
+
+/* Performans: daimi yenidən rəsm yaradan box-shadow animasiyaları yüngülləşdirildi */
+.mk-me { animation-duration: 2.4s; }
+.act-sos { box-shadow: 0 0 0 7px rgba(224, 40, 46, .22), 0 6px 16px rgba(179, 18, 46, .35); }
+.c-panel .card, .c-panel .item { contain: layout paint; }

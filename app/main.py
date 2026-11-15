@@ -170,8 +170,12 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
             if k == "Content-Security-Policy" and is_api_docs:
                 continue  # Swagger UI öz skriptlərini CDN-dən yükləyir; sərt CSP yalnız tətbiq səhifələrinə tətbiq olunur
             response.headers.setdefault(k, v)
-        if request.url.path.startswith("/api/"):
+        path = request.url.path
+        if path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
+        elif path in ("/", "/citizen", "/dispatcher") or (path.startswith("/static/") and "/vendor/" not in path):
+            # Brauzer hər dəfə yoxlasın (ETag/304 ilə ucuzdur) — yeniləmədən sonra köhnə JS/CSS qalmasın
+            response.headers.setdefault("Cache-Control", "no-cache")
         return response
 
     # Ən xarici qat: gövdə ölçüsü həddi (Content-Length və chunked axın üçün eyni qayda)

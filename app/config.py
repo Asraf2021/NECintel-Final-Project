@@ -30,6 +30,8 @@ class Settings:
 
     # --- myGov ilə qeydiyyat (mock | oidc | off) ---
     mygov_mode = _env("UCE_MYGOV_MODE", "mock")
+    # Prioritet (Kritik Prioritet SOS) yalnız myGov ilə əlilliyi TƏSDİQLƏNMİŞ vətəndaşa verilir (komanda qərarı)
+    priority_requires_verification = _env("UCE_PRIORITY_REQUIRES_VERIFICATION", "1") == "1"
     # FİN / provayder ID-sinin heşi üçün sabit açar (SECRET_KEY dəyişsə də şəxs öz hesabına uyğun gəlsin)
     identity_pepper = _env("UCE_IDENTITY_PEPPER", "uce-identity-pepper-change-in-production")
     mygov_authorize_url = _env("UCE_MYGOV_AUTHORIZE_URL", "")

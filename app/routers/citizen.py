@@ -111,11 +111,15 @@ async def update_profile(citizen_id: str, body: ProfileUpdate, request: Request,
     if not re.match(CITIZEN_ID_RE, citizen_id):
         raise HTTPException(422, "invalid_citizen_id")
     identity.ensure_owner(ctx, request, citizen_id)
-    if identity.get_account(ctx, citizen_id):
+    acc = identity.get_account(ctx, citizen_id)
+    if acc:
         # Qeydiyyatlı vətəndaş: rol hesabdakı əlillik xüsusiyyəti ilə sinxron dəyişir
-        result = identity.set_disability(ctx, citizen_id, body.role == "priority_citizen") | {"role": body.role}
+        result = identity.set_disability(ctx, citizen_id, body.role == "priority_citizen")
         analytics.invalidate()
-        return result
+        return result | {"role": "priority_citizen" if identity.priority_allowed(identity.get_account(ctx, citizen_id)) else "citizen"}
+    if body.role == "priority_citizen" and settings.priority_requires_verification:
+        # Anonim vətəndaş özünü prioritet elan edə bilməz — əvvəlcə myGov ilə əlillik təsdiqi
+        raise HTTPException(403, "verification_required")
     result = sos_svc.set_profile(ctx, citizen_id, body.role)
     analytics.invalidate()
     return result

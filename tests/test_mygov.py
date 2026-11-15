@@ -200,7 +200,8 @@ def test_upload_never_auto_verifies_even_with_mygov_record(client, ctx, uploads)
     row = account(ctx, cid(10))
     assert row["verified_by"] is None and row["certificate_mime"] == "application/pdf"
     assert (uploads / row["certificate_file"]).read_bytes() == PDF
-    assert ctx.db.one("SELECT role FROM citizen_profiles WHERE citizen_id=?", (cid(10),))["role"] == "priority_citizen"
+    # fayl prioritet vermir — yalnız dispetçer təsdiqindən sonra
+    assert ctx.db.one("SELECT role FROM citizen_profiles WHERE citizen_id=?", (cid(10),))["role"] == "citizen"
 
 
 def test_confirm_with_mygov_record_verifies_without_any_file(client, ctx):
@@ -610,9 +611,10 @@ def test_anonymous_unregistered_citizen_unaffected(client, ctx):
     assert send_sos(client, anon).status_code == 201
     assert client.post(STATUS, json={"citizen_id": anon, "status": "evacuating"}).status_code == 200
     assert client.get(f"/api/v1/citizens/{anon}").status_code == 200
+    # Anonim vətəndaş SOS göndərə bilir, amma özünü prioritet elan edə bilməz (myGov təsdiqi tələb olunur)
     r = client.put(f"/api/v1/citizens/{anon}/profile", json={"role": "priority_citizen"})
-    assert r.status_code == 200, r.text
-    assert r.json()["sos_priority"] == 1
+    assert r.status_code == 403 and r.json()["detail"] == "verification_required"
+    assert client.put(f"/api/v1/citizens/{anon}/profile", json={"role": "citizen"}).status_code == 200
     assert client.get(EVAC, params={"district_id": district, "citizen_id": anon}).status_code == 200
     assert account(ctx, anon) is None
 
@@ -689,3 +691,51 @@ def test_start_returns_503_when_mygov_disabled(client):
     r = client.get("/api/v1/auth/mygov/start", follow_redirects=False)
     assert r.status_code == 503
     assert r.json()["detail"] == "mygov_disabled"
+
+
+# ---------------------------------------------------------------------------
+# Prioritet siyasəti: yalnız myGov ilə əlilliyi təsdiqlənmiş vətəndaş (komanda qərarı)
+# ---------------------------------------------------------------------------
+def _role(ctx, c):
+    row = ctx.db.one("SELECT role FROM citizen_profiles WHERE citizen_id=?", (c,))
+    return row["role"] if row else "citizen"
+
+
+def test_policy_mygov_record_confirm_gives_priority(client, ctx):
+    token = mygov_login(client, "p1", device_id=cid(60))
+    client.put("/api/v1/me/disability", headers=bearer(token), json={"enabled": True})
+    assert _role(ctx, cid(60)) == "priority_citizen"
+    r = client.post(SOS, json={"citizen_id": cid(60), "type": "medical", "lat": 40.39, "lon": 49.84}, headers=bearer(token))
+    assert r.json()["sos"]["priority"] == 1
+
+
+def test_policy_no_disability_cannot_get_priority(client, ctx):
+    token = mygov_login(client, "p2", device_id=cid(61))
+    client.put("/api/v1/me/disability", headers=bearer(token), json={"enabled": True})   # özü bildirir
+    assert _role(ctx, cid(61)) == "citizen"
+    r = client.put(f"/api/v1/citizens/{cid(61)}/profile", headers=bearer(token), json={"role": "priority_citizen"})
+    assert r.status_code == 200 and r.json()["role"] == "citizen"
+    r = client.post(SOS, json={"citizen_id": cid(61), "type": "medical", "lat": 40.39, "lon": 49.84}, headers=bearer(token))
+    assert r.json()["sos"]["priority"] == 2
+
+
+def test_policy_certificate_number_gives_priority(client, ctx):
+    token = mygov_login(client, "p4", device_id=cid(62))
+    client.post("/api/v1/me/disability/verify", headers=bearer(token), json={"certificate_no": "ƏL-2026-000777"})
+    assert _role(ctx, cid(62)) == "priority_citizen"
+
+
+def test_policy_uploaded_file_needs_dispatcher_approval(client, ctx, auth_headers):
+    token = mygov_login(client, "p2", device_id=cid(63))
+    upload(client, token, PNG, "image/png")
+    assert _role(ctx, cid(63)) == "citizen"
+    client.post(f"{VERIF}/{cid(63)}/approve", headers=auth_headers)
+    assert _role(ctx, cid(63)) == "priority_citizen"
+    client.post(f"{VERIF}/{cid(63)}/reject", headers=auth_headers)
+    assert _role(ctx, cid(63)) == "citizen"
+
+
+def test_policy_anonymous_cannot_self_declare(client, ctx):
+    r = client.put(f"/api/v1/citizens/{cid(64)}/profile", json={"role": "priority_citizen"})
+    assert r.status_code == 403
+    assert send_sos(client, cid(64)).json()["sos"]["priority"] == 2
