@@ -149,7 +149,10 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
     @app.middleware("http")
     async def harden(request: Request, call_next):
         response = await call_next(request)
+        is_api_docs = request.url.path in ("/docs", "/redoc", "/docs/oauth2-redirect")
         for k, v in SECURITY_HEADERS.items():
+            if k == "Content-Security-Policy" and is_api_docs:
+                continue  # Swagger UI öz skriptlərini CDN-dən yükləyir; sərt CSP yalnız tətbiq səhifələrinə tətbiq olunur
             response.headers.setdefault(k, v)
         if request.url.path.startswith("/api/"):
             response.headers.setdefault("Cache-Control", "no-store")
