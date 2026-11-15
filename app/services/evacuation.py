@@ -8,7 +8,7 @@ from ..config import settings
 from ..context import AppContext
 from ..core.geo import haversine_m
 from ..core.roles import citizen_role, role_policy
-from . import shelters as shelter_svc
+from . import forecast, shelters as shelter_svc
 
 CANDIDATES = 8  # marşrutu hesablanan ən yaxın məntəqə sayı
 
@@ -38,8 +38,14 @@ async def build_plan(ctx: AppContext, lat: float, lon: float, citizen_id: str | 
         candidates += [s for s in open_shelters[CANDIDATES:] if s["accepting"]][:4]
 
     routes, source = await ctx.routing.routes((lat, lon), [(s["lat"], s["lon"]) for s in candidates], profile)
+    forecast.attach(ctx, candidates)
     for s, r in zip(candidates, routes):
         s["route"] = r if r.get("found") else None
+        # Proqnoza görə vətəndaş çatana qədər 90%-ə çatacaqsa — qabaqcadan alternativ (etibarlı proqnoz olduqda)
+        fc = s.get("forecast")
+        s["fills_before_arrival"] = bool(
+            s["route"] and s["accepting"] and forecast.reliable(fc) and fc["t90_min"] is not None
+            and fc["t90_min"] < s["route"]["duration_min"])
 
     reachable = [s for s in candidates if s["route"]]
     accepting = [s for s in reachable if s["accepting"]]
@@ -48,13 +54,19 @@ async def build_plan(ctx: AppContext, lat: float, lon: float, citizen_id: str | 
     reason = "nearest"
 
     if accepting:
-        recommended = min(accepting, key=lambda s: s["route"]["duration_min"])
+        best = min(accepting, key=lambda s: s["route"]["duration_min"])
+        safe_on_arrival = [s for s in accepting if not s["fills_before_arrival"]]
+        recommended = min(safe_on_arrival, key=lambda s: s["route"]["duration_min"]) if safe_on_arrival else best
+        if recommended["id"] != best["id"]:
+            reason = "forecast_full"
+            skipped.append({"shelter_id": best["id"], "name": best["name"], "reason": "fills_before_arrival",
+                            "t90_min": best["forecast"]["t90_min"]})
     elif reachable:
         recommended = min(reachable, key=lambda s: s["occupancy_pct"])
         reason = "all_full"
 
     nearest = candidates[0] if candidates else None
-    if recommended and nearest and recommended["id"] != nearest["id"]:
+    if recommended and nearest and recommended["id"] != nearest["id"] and reason != "forecast_full":
         if not nearest["accepting"]:
             reason = "nearest_full" if reason == "nearest" else reason
             skipped.append({"shelter_id": nearest["id"], "name": nearest["name"], "reason": "shelter_full",

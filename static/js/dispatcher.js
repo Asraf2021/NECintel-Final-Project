@@ -1,6 +1,6 @@
 /* Modul 2 — Fövqəladə Hallar Dispetçer Paneli və Analitika */
 (function () {
-  const { nm, api, esc, connectStream, fmtDist, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
+  const { fcText, nm, api, esc, connectStream, fmtDist, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
     createMap, shelterIcon, toast, t } = window.UCE;
   const $ = (id) => document.getElementById(id);
   const RISK_TAG = { low: "green", medium: "blue", high: "amber", critical: "red" };
@@ -328,7 +328,9 @@
     const order = { open: 0, reserve: 1, closed: 2 };
     const list = state.data.shelters.slice().sort((a, b) => order[a.status] - order[b.status] || b.occupancy_pct - a.occupancy_pct);
     $("shelterTable").innerHTML = '<table class="d-table"><thead><tr><th>' + esc(t("d.shelters.name")) + "</th><th>" + esc(t("d.shelters.occ")) + "</th><th>" +
-      esc(t("d.shelters.status")) + "</th><th></th></tr></thead><tbody>" + list.map((s) => {
+      esc(t("d.shelters.status")) + "</th><th>" + esc(t("fc.title")) + "</th><th></th></tr></thead><tbody>" + list.map((s) => {
+        const fc = s.status === "open" ? fcText(s.forecast) : { main: "", sub: "", level: "none" };
+        const fcCell = fc.main ? '<div class="fc fc-' + fc.level + '">' + esc(fc.main) + "</div>" + (fc.sub ? '<div class="sub">' + esc(fc.sub) + "</div>" : "") : "";
         let ctl = "";
         if (manage) {
           ctl = s.status === "open"
@@ -339,7 +341,8 @@
         return '<tr><td><div class="nm">' + esc(nm(s)) + (s.accessible ? ' <span class="acc-mini" title="' + esc(t("legend.accessible")) + '">' + ICON.wheelchair + "</span>" : "") +
           '</div><div class="sub">' + esc(t("type." + s.type)) + " · " + fmtNum(s.occupancy) + " / " + fmtNum(s.capacity) +
           '</div></td><td><div class="occ-cell">' + bar(s.occupancy_pct, levelColor(s)) + "<b>" + Math.round(s.occupancy_pct) + '%</b></div></td><td><span class="tag ' + tag + '">' +
-          esc(s.status === "open" && !s.accepting ? t("plan.full") : t("d.shelter." + s.status)) + "</span></td><td>" + ctl + "</td></tr>";
+          esc(s.status === "open" && !s.accepting ? t("plan.full") : t("d.shelter." + s.status)) + '</span><div class="sub">' + esc(t("fc.updated", { ago: timeAgo(s.updated_at) })) +
+          "</div></td><td>" + fcCell + "</td><td>" + ctl + "</td></tr>";
       }).join("") + "</tbody></table>";
   }
 
@@ -375,7 +378,7 @@
   }
 
   function renderSimMenu() {
-    const items = ["sos_cluster", "priority_sos", "shelter_fill", "crowd", "-", "road_close", "road_open_all", "-", "api_outage", "api_restore", "-", "reset"];
+    const items = ["sos_cluster", "priority_sos", "shelter_fill", "crowd", "inflow_start", "inflow_stop", "-", "road_close", "road_open_all", "-", "api_outage", "api_restore", "-", "reset"];
     $("simList").innerHTML = items.map((n) => n === "-" ? "<hr>" : '<button type="button" data-sim="' + n + '">' + esc(t("d.sim." + n)) + "</button>").join("");
   }
 

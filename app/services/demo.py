@@ -1,7 +1,9 @@
 """Demo ssenariləri: münsiflərə sistemi canlı göstərmək üçün hadisələri simulyasiya edir."""
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import math
 import random
 import uuid
@@ -10,6 +12,45 @@ from ..config import settings
 from ..context import AppContext
 from ..core.security import hash_password
 from . import crisis, evacuation, shelters as shelter_svc, sos as sos_svc
+
+
+INFLOW_TICK_S = 3.0
+log = logging.getLogger("uce.demo")
+
+
+async def _inflow_loop(ctx: AppContext, targets: list[str]) -> None:
+    """Canlı insan axını: seçilmiş məntəqələrə hər 3 saniyədən bir gəliş (Time-to-Capacity proqnozunu göstərmək üçün)."""
+    from . import analytics
+    tick = 0
+    while True:
+        await asyncio.sleep(INFLOW_TICK_S)
+        tick += 1
+        try:
+            changed_full = False
+            for sid in targets:
+                s = shelter_svc.get_shelter(ctx, sid)
+                if not s or s["status"] != "open" or s["occupancy"] >= s["capacity"]:
+                    continue
+                # tutumun ~0.15–0.3%-i hər addımda (bir az təsadüfi) — 90%-ə bir neçə dəqiqəyə çatır
+                inc = max(1, round(s["capacity"] * random.uniform(0.0015, 0.003)))
+                updated = shelter_svc.update_shelter(ctx, sid, delta=inc)
+                crisis.evaluate_shelter(ctx, updated)
+                if s["accepting"] and not updated["accepting"]:
+                    changed_full = True
+            analytics.invalidate()
+            if changed_full or tick % 5 == 0:
+                await evacuation.reevaluate_plans(ctx)
+        except Exception:  # simulyator heç vaxt tətbiqi dayandırmamalıdır
+            log.exception("inflow tick failed")
+
+
+def stop_inflow(ctx: AppContext) -> bool:
+    task = getattr(ctx, "inflow_task", None)
+    if task and not task.done():
+        task.cancel()
+        ctx.inflow_task = None
+        return True
+    return False
 
 
 async def _sync_now(ctx: AppContext) -> int:
@@ -55,6 +96,29 @@ async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: s
         lon = d["lon"] + random.uniform(-0.002, 0.002)
         res = sos_svc.create_sos(ctx, citizen, random.choice(["medical", "collapse", "flood", "fire"]), lat, lon, "Demo")
         return {"scenario": name, "district": d["name"], "sos_id": res["sos"]["id"], "priority": res["sos"]["priority"]}
+
+    if name == "inflow_start":
+        stop_inflow(ctx)
+        # Ən çox vətəndaşa tövsiyə olunan məntəqələr + ən dolu açıq məntəqələr
+        rows = ctx.db.query(
+            "SELECT p.shelter_id FROM evacuation_plans p JOIN shelters s ON s.id=p.shelter_id WHERE s.status='open'"
+            " GROUP BY p.shelter_id ORDER BY COUNT(*) DESC LIMIT 2")
+        targets = [r["shelter_id"] for r in rows]
+        for s in sorted(shelter_svc.list_shelters(ctx), key=lambda x: -x["occupancy_pct"]):
+            if len(targets) >= 4:
+                break
+            if s["accepting"] and s["id"] not in targets:
+                targets.append(s["id"])
+        for sid in targets:  # başlanğıc nöqtəsi
+            sh = shelter_svc.get_shelter(ctx, sid)
+            ctx.db.execute("INSERT INTO shelter_occupancy_log (shelter_id, ts, occupancy) VALUES (?,?,?)",
+                           (sid, __import__("time").time(), sh["occupancy"]))
+        ctx.inflow_task = asyncio.create_task(_inflow_loop(ctx, targets))
+        return {"scenario": name, "shelters": [shelter_svc.get_shelter(ctx, t)["name"] for t in targets],
+                "tick_s": INFLOW_TICK_S}
+
+    if name == "inflow_stop":
+        return {"scenario": name, "stopped": stop_inflow(ctx)}
 
     if name == "shelter_fill":
         target = shelter_svc.get_shelter(ctx, shelter_id) if shelter_id else None
@@ -126,6 +190,7 @@ async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: s
         return {"scenario": name, "mode": "off", "routing": ctx.routing.status()}
 
     if name == "reset":
+        stop_inflow(ctx)
         await ctx.routing.sim("reset")
         ctx.routing.manual_closures.clear()
         ctx.routing.breaker.success()

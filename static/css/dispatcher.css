@@ -196,3 +196,10 @@
 @keyframes pulse-prio { 70% { box-shadow: 0 0 0 18px rgba(124, 58, 237, 0); } 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0); } }
 .kpi.is-alarm[style*="C9B3FF"] { border-color: #7C3AED; background: #1F1636; }
 .acc-mini { display: inline-flex; vertical-align: -2px; color: #C9B3FF; font-size: 14px; }
+
+/* Time-to-Capacity proqnozu */
+.fc { font-weight: 700; font-size: 13px; white-space: nowrap; }
+.fc-soon { color: #FF9AA5; }
+.fc-rising { color: #FFD08A; }
+.fc-stable, .fc-none { color: var(--d-mut); font-weight: 600; }
+.fc-full { color: #FF5A5F; }

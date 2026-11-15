@@ -175,3 +175,4 @@
 .status-card .st-priority { background: rgba(255, 255, 255, .26); font-weight: 800; }
 .status-card .st-priority svg { font-size: 18px; }
 .c-legend i.bn { width: 16px; height: 0; border-radius: 0; border-top: 4px dotted #F2A20C; }
+.note.note-fc { background: #FFF1F0; color: #8A1C12; }

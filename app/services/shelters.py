@@ -52,6 +52,12 @@ def update_shelter(ctx: AppContext, shelter_id: str, occupancy: int | None = Non
         new_status = status or s["status"]
         ctx.db.execute("UPDATE shelters SET occupancy=?, status=?, updated_at=? WHERE id=?",
                        (new_occ, new_status, time.time(), shelter_id))
+        if new_occ != s["occupancy"]:
+            # Doluluq tarixçəsi — Time-to-Capacity proqnozu üçün
+            ctx.db.execute("INSERT INTO shelter_occupancy_log (shelter_id, ts, occupancy) VALUES (?,?,?)",
+                           (shelter_id, time.time(), new_occ))
     updated = get_shelter(ctx, shelter_id)
+    from . import forecast
+    forecast.attach(ctx, [updated])
     ctx.bus.publish("shelter_update", {"shelter": updated}, channel="public")
     return updated

@@ -1,6 +1,6 @@
 /* Modul 1 — Vətəndaş Təhlükəsizlik tətbiqi */
 (function () {
-  const { nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
+  const { fcText, nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
     createMap, shelterIcon, toast, t } = window.UCE;
   const $ = (id) => document.getElementById(id);
   const SOS_TYPES = ["fire", "collapse", "flood", "medical"];
@@ -227,6 +227,10 @@
         '<div class="stat"><b>' + esc(fmtNum(free)) + "</b><span>" + esc(t("plan.free")) + "</span></div></div>" +
         '<div class="occ-row"><span>' + esc(t("plan.occupancy")) + '</span><b>' + s.occupancy_pct + "% · " + fmtNum(s.occupancy) + " / " + fmtNum(s.capacity) + "</b></div>" + occBar(s);
       if (isRec && rec.reason !== "nearest") html += '<p class="note">' + esc(t("plan.reason." + rec.reason)) + "</p>";
+      const fc = s.forecast;
+      if (fc && fc.trend === "rising" && fc.t90_min > 0 && (fc.confidence === "medium" || fc.confidence === "high")) {
+        html += '<p class="note note-fc">' + esc(t("fc.citizen", { min: Math.round(fc.t90_min), conf: t("fc.conf." + fc.confidence) })) + "</p>";
+      }
       if (wheel && state.barriers.length) html += '<p class="note note-acc">' + esc(t("plan.barriers_avoided", { n: state.barriers.length })) + "</p>";
       if (r && r.steps && r.steps.length) {
         html += '<ol class="steps" aria-label="' + esc(t("plan.steps")) + '">' + r.steps.map((st) => "<li><span>" + esc(st.road) + "</span><span>" + esc(fmtDist(st.distance_m)) + "</span></li>").join("") + "</ol>";
@@ -238,7 +242,9 @@
     html += '<section><h2 class="card-title" style="margin:4px 2px 10px"><span class="ti">' + ICON.pin + "</span>" + esc(t("plan.nearest")) + '</h2><div class="list">';
     plan.shelters.forEach((sh) => {
       const full = !sh.accepting;
-      const sub = (sh.route ? fmtMin(sh.route.duration_min) + " · " + fmtDist(sh.route.distance_m) : t("plan.no_route")) + " · " + t("type." + sh.type);
+      const f = fcText(sh.forecast);
+      const sub = (sh.route ? fmtMin(sh.route.duration_min) + " · " + fmtDist(sh.route.distance_m) : t("plan.no_route")) + " · " + t("type." + sh.type) +
+        (f.level === "rising" || f.level === "soon" ? " · " + f.main : "");
       html += '<button type="button" class="item' + (sh.id === state.selectedId ? " is-active" : "") + (full ? " is-full" : "") + '" data-shelter="' + esc(sh.id) + '" style="--c:' + levelColor(sh) + '">' +
         '<span class="item-ico">' + ICON[TYPE_ICON[sh.type]] + '</span><span><span class="item-name">' + esc(nm(sh)) + (sh.accessible ? ' <span class="acc-dot" title="' + esc(t("plan.accessible")) + '">' + ICON.wheelchair + "</span>" : "") +
         '</span><span class="item-sub" style="display:block">' + esc(sub) + "</span>" + occBar(sh) +

@@ -138,6 +138,7 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
         finally:
             if task:
                 task.cancel()
+            demo.stop_inflow(ctx)
             await client.aclose()
             db.close()
 

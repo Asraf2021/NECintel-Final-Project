@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, ts REAL NOT NULL, actor TEXT NOT NULL, role TEXT NOT NULL,
     action TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS shelter_occupancy_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, shelter_id TEXT NOT NULL, ts REAL NOT NULL, occupancy INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_occlog ON shelter_occupancy_log(shelter_id, ts);
 CREATE TABLE IF NOT EXISTS citizen_profiles (
     citizen_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'citizen', needs TEXT NOT NULL DEFAULT '[]', updated_at REAL NOT NULL
 );
@@ -67,7 +71,7 @@ MIGRATIONS = [
     ("brigades", "accessible_transport", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
-DATA_TABLES = ["citizen_profiles", "sos_signals", "citizen_status", "evacuation_plans", "alerts", "road_closures", "shelters", "brigades"]
+DATA_TABLES = ["shelter_occupancy_log", "citizen_profiles", "sos_signals", "citizen_status", "evacuation_plans", "alerts", "road_closures", "shelters", "brigades"]
 
 
 class Database:

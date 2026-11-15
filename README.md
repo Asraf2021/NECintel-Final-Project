@@ -121,6 +121,43 @@ Bunlar **yalnız nümayiş üçün** hesablardır. Parollar `UCE_DISPATCHER_PASS
 
 ---
 
+### Əlavə innovasiya — Time-to-Capacity (doluluq proqnozu)
+
+Sistem məntəqənin hazırkı dolulugu ilə yanaşı **90% kritik həddinə və 100% tam tutuma nə vaxt çatacağını** proqnozlaşdırır ("telefon batareyası neçə dəqiqəyə dolacaq" yanaşması). Metodologiya komandanın beynəlxalq araşdırma sənədindən götürülüb (`docs/Beynelxalq_Arasdirma.docx`, bölmə 2.5 və 2.10):
+
+```
+r    = son 10 dəqiqədə xalis artım / dəqiqə sayı      (nəfər/dəq)
+T90  = (0.9 · C − N) / r          T100 = (C − N) / r
+```
+
+- Hər doluluq dəyişikliyi `shelter_occupancy_log` cədvəlinə yazılır; proqnoz `app/services/forecast.py`-da hesablanır.
+- Proqnoz interval və **etibarlılıq səviyyəsi** ilə göstərilir (aşağı / orta / yüksək — nümunə sayı və müşahidə müddətindən asılı). r ≤ 0 olduqda vaxt göstərilmir ("artım yoxdur").
+- **Qabaqcadan yönləndirmə:** etibarlı proqnoza görə məntəqə vətəndaş çatana qədər 90%-ə çatacaqsa (T90 < marşrut müddəti), sistem hələ dolmamış məntəqəni yox, növbəti uyğun məntəqəni tövsiyə edir (`reason = "forecast_full"`).
+- Dispetçer cədvəlində "Proqnoz" sütunu və hər məntəqə üçün "yeniləndi … əvvəl" (məlumatın təzəliyi); vətəndaş kartında "bu məntəqə ~N dəqiqəyə 90% dolacaq".
+- Demo: "Simulyasiya" → **"Canlı insan axınını başlat (proqnoz)"** — seçilmiş məntəqələrə hər 3 saniyədən bir gəliş; ~1 dəqiqədən sonra proqnoz görünür.
+- Sənəddəki nümunə ilə yoxlanılıb: C = 1000, N = 780, r = 4 nəfər/dəq → T90 = 30 dəq, T100 = 55 dəq (`tests/test_forecast.py`).
+
+> Bu, sabit axın fərziyyəsinə əsaslanan sadə modeldir; real tətbiqdə statistik / ML modeli (məs. Prophet) və giriş-çıxış sayğacları ilə əvəz oluna bilər.
+
+## Beynəlxalq təcrübə və istinadlar
+
+Funksiyalar komandanın araşdırma sənədində (`docs/Beynelxalq_Arasdirma.docx`) təhlil olunan beynəlxalq sistemlərə əsaslanır. Layihə onları **vahid qərar axınında** birləşdirir:
+
+| Beynəlxalq nümunə | Ondan götürülən ideya | Layihədə harada |
+|---|---|---|
+| SOBO-WEB / ISUT (Yaponiya) | Bütün qurumlar üçün vahid xəritə və hadisə bazası | Vətəndaş və dispetçer eyni backend, eyni DB və canlı hadisə axını (SSE) |
+| PetaBencana.id (İndoneziya) | Vətəndaşdan geolokasiyalı hesabat, açıq API | Bir toxunuşla geolokasiyalı SOS, açıq REST API (`/docs`) |
+| FEMA ESF#6 Shelter System (ABŞ) | Sığınacaq statusu, tutum, doluluq, **əlil arabası üçün əlçatanlıq** | Məntəqə kartı: status, tutum, doluluq %, `accessible`; Drop 1 əlçatan marşrut |
+| Esri Emergency Shelter Management | Doluluq hesabatı və son yenilənmə vaxtı | Doluluq tarixçəsi, "yeniləndi … əvvəl" |
+| RapidSOS (ABŞ) | Dispetçerə kontekstli vahid hadisə kartı | SOS kartı: növ, rayon, vaxt, qeyd, prioritet, təyin olunmuş briqada |
+| Waze for Cities | Yol bağlanması feed-i və marşrutun yenidən hesablanması | Xarici API-dən bağlı yol sinxronu → avtomatik yenidən marşrut |
+| myResponder / SGSecure (Sinqapur) | "Təhlükəsizəm" statusu, şəxsi SOS | "Təhlükəsizəm" düyməsi, SOS statusu tarixçədə qalır |
+| Readiness TW (Tayvan) | GPS → yaxın sığınacaq → təhlükəsiz marşrut → xəbərdarlıq | Vətəndaş axını eyni ardıcıllıqla |
+| Xəstəxana tutumu proqnozları (Almaniya, B. Britaniya) | Tutum həddinin aşılma vaxtının proqnozu | **Time-to-Capacity** proqnozu |
+| Time-varying demand (Yaponiya, Higashihiroshima) | "Ən yaxın" statik olmamalıdır | Tövsiyə məsafə + doluluq + proqnoz + rol əsasında |
+
+Təhlükəsizlik prinsipi (araşdırma, bölmə 5.2): sistem qərarı özü icra etmir — Qırmızı Həyəcan və briqada təyini **dispetçerin bir kliklə təsdiqi** ilə icra olunur, bütün əməliyyatlar audit jurnalına yazılır.
+
 ## Demo ssenarisi (münsiflər üçün addım-addım)
 
 1. **İki pəncərə açın.** Birində `http://localhost:8000/citizen`, digərində `http://localhost:8000/dispatcher`. Dispetçer panelinə `dispatcher` / `dispatcher123` ilə daxil olun.
@@ -129,8 +166,9 @@ Bunlar **yalnız nümayiş üçün** hesablardır. Parollar `UCE_DISPATCHER_PASS
 4. **Dispetçer: "Simulyasiya" → "SOS klasteri yarat (4 siqnal)".** Təsadüfi rayonda ~300 m radiusda 4 fərqli vətəndaşdan siqnal yaradılır → ekranın yuxarısında səs siqnalı ilə qırmızı **"Qırmızı Həyəcan: Əlavə Xilasetmə Briqadası Göndər və Yeni Toplanış Nöqtəsi Aç"** zolağı çıxır. **"Bir kliklə təsdiqlə"** düyməsini basın: ən yaxın uyğun briqada göndərilir (xəritədə hədəfə xətt), ən yaxın ehtiyat toplanış məntəqəsi açılır (vətəndaş pəncərəsində "Yeni toplanış məntəqəsi açıldı" bildirişi). Düyməni təkrar basmaq heç nəyi təkrarlamır.
 5. **Dispetçer: "Simulyasiya" → "Məntəqəni 97% doldur".** Ən çox vətəndaşa tövsiyə olunan açıq məntəqə (belə yoxdursa — qəbul edən ən dolu məntəqə) 97%-ə çatdırılır. Planı həmin məntəqəyə yönəlmiş vətəndaşlara **dərhal avtomatik alternativ marşrut** göndərilir (vətəndaş pəncərəsində sarı "Marşrut dəyişdirildi" zolağı), doluluq 95%-i keçdiyi üçün paneldə ikinci növ "Qırmızı Həyəcan" da yaranır.
 6. **Dispetçer: "Simulyasiya" → "Təxliyə marşrutundakı yolu bağla"** (və ya xəritədə istənilən yola klikləyib **"Yolu bağla"**). Simulyasiya aktiv təxliyə marşrutlarında ən çox istifadə olunan yolu Xarici API tərəfində bağlayır və vəziyyəti dərhal sinxronlaşdırır; təsirlənən vətəndaşlar yeni marşrut alır, bağlı yol xəritədə qırmızı qırıq xətlə görünür.
-7. **Dispetçer: "Simulyasiya" → "Xarici API kəsintisi".** Xarici API 503 qaytarmağa başlayır, circuit breaker dərhal açılır, panelin yuxarısında **"Xəritə API: KƏSİNTİ — lokal ehtiyat rejim"**, vətəndaş tətbiqində "Ehtiyat rejim" zolağı görünür. Marşrutlar fasiləsiz qurulmağa davam edir — lokal Dijkstra ilə, son məlum bağlı yollar nəzərə alınmaqla (plan cavabında `routing.source = "fallback"`). **"Xarici API-ni bərpa et"** seçildikdə sistem dərhal normal rejimə qayıdır.
-8. **"Sıfırla".** Bütün məlumat ilkin vəziyyətə qaytarılır, bağlı yollar açılır.
+7. **Dispetçer: "Simulyasiya" → "Canlı insan axınını başlat (proqnoz)".** ~1 dəqiqədən sonra "Toplanış məntəqələri" cədvəlində "90%-ə ~N dəq" proqnozu və etibarlılıq səviyyəsi görünür; vətəndaş kartında da proqnoz çıxır, məntəqə vətəndaş çatana qədər dolacaqsa tövsiyə qabaqcadan dəyişir.
+8. **Dispetçer: "Simulyasiya" → "Xarici API kəsintisi".** Xarici API 503 qaytarmağa başlayır, circuit breaker dərhal açılır, panelin yuxarısında **"Xəritə API: KƏSİNTİ — lokal ehtiyat rejim"**, vətəndaş tətbiqində "Ehtiyat rejim" zolağı görünür. Marşrutlar fasiləsiz qurulmağa davam edir — lokal Dijkstra ilə, son məlum bağlı yollar nəzərə alınmaqla (plan cavabında `routing.source = "fallback"`). **"Xarici API-ni bərpa et"** seçildikdə sistem dərhal normal rejimə qayıdır.
+9. **"Sıfırla".** Bütün məlumat ilkin vəziyyətə qaytarılır, bağlı yollar açılır.
 
 > Təsdiqdən sonra eyni rayon üçün 5 dəqiqə ərzində yeni SOS-klaster həyəcanı yaradılmır (cooldown). Ssenarini təkrar göstərmək üçün başqa rayon seçin və ya "Sıfırla" əməliyyatından istifadə edin.
 

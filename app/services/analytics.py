@@ -5,7 +5,7 @@ import time
 
 from ..config import settings
 from ..context import AppContext
-from . import crisis, shelters as shelter_svc, sos as sos_svc
+from . import crisis, forecast, shelters as shelter_svc, sos as sos_svc
 
 _cache: dict = {"ts": 0.0, "data": None}
 OVERVIEW_TTL_S = 1.0  # mikro-keş: yüksək yük altında eyni saniyədə təkrar hesablanmır
@@ -28,7 +28,7 @@ def overview(ctx: AppContext) -> dict:
         return _cache["data"]
 
     window = settings.sos_cluster_window_s
-    shelters = shelter_svc.list_shelters(ctx, include_reserve=True)
+    shelters = forecast.attach(ctx, shelter_svc.list_shelters(ctx, include_reserve=True))
     open_sh = [s for s in shelters if s["status"] == "open"]
     brigades = list_brigades(ctx)
     sos_list = sos_svc.list_sos(ctx, limit=300)

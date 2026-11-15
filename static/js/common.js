@@ -136,6 +136,22 @@
     return window.I18N.lang === "en" && obj.name_en ? obj.name_en : obj.name;
   }
 
+  // Time-to-Capacity proqnozunun qısa mətni
+  function fcText(fc) {
+    if (!fc) return { main: "", sub: "", level: "none" };
+    if (fc.trend === "full") return { main: t("fc.full"), sub: "", level: "full" };
+    if (fc.trend === "rising" && fc.t90_min != null) {
+      const main = fc.t90_min > 0 ? t("fc.t90", { min: Math.round(fc.t90_min) }) : t("fc.t100", { min: Math.round(fc.t100_min) });
+      const range = fc.t90_min > 0 && fc.t90_range ? t("fc.range", { a: fc.t90_range[0], b: fc.t90_range[1] }) : "";
+      const sub = [range, t("fc.rate", { r: fc.rate_per_min }), t("fc.conf." + fc.confidence)].filter(Boolean).join(" · ");
+      const soon = (fc.t90_min > 0 ? fc.t90_min : fc.t100_min) <= 15;
+      return { main, sub, level: soon ? "soon" : "rising" };
+    }
+    if (fc.trend === "stable") return { main: t("fc.stable"), sub: "", level: "stable" };
+    if (fc.trend === "falling") return { main: t("fc.falling"), sub: "", level: "stable" };
+    return { main: t("fc.nodata"), sub: "", level: "none" };
+  }
+
   function toast(message, kind) {
     let box = document.getElementById("toasts");
     if (!box) {
@@ -152,6 +168,6 @@
     setTimeout(() => { el.classList.add("is-out"); setTimeout(() => el.remove(), 300); }, 4200);
   }
 
-  window.UCE = { nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR,
+  window.UCE = { fcText, nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR,
     ICON, TYPE_ICON, createMap, shelterIcon, toast, t };
 })();
