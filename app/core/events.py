@@ -26,6 +26,7 @@ class Subscriber:
 class EventBus:
     def __init__(self) -> None:
         self._subs: set[Subscriber] = set()
+        self._loop: asyncio.AbstractEventLoop | None = None
         self.published = 0
         self.dropped = 0
 
@@ -36,6 +37,17 @@ class EventBus:
     def publish(self, event: str, data: dict | None = None, channel: str = "public",
                 citizen_id: str | None = None) -> None:
         payload = {"event": event, "data": data or {}, "ts": time.time()}
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # Sinxron handler thread-pool-da işləyir: asyncio.Queue thread-safe deyil,
+            # ona görə çatdırılma hadisə dövrünün (event loop) öz thread-inə ötürülür.
+            if self._loop is not None and not self._loop.is_closed():
+                self._loop.call_soon_threadsafe(self._deliver, payload, channel, citizen_id)
+                return
+        self._deliver(payload, channel, citizen_id)
+
+    def _deliver(self, payload: dict, channel: str, citizen_id: str | None) -> None:
         self.published += 1
         for sub in list(self._subs):
             if citizen_id is not None:
@@ -53,6 +65,7 @@ class EventBus:
                 self.dropped += 1
 
     async def stream(self, channel: str, citizen_id: str | None = None):
+        self._loop = asyncio.get_running_loop()
         sub = Subscriber(channel=channel, citizen_id=citizen_id)
         self._subs.add(sub)
         try:

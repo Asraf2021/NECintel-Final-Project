@@ -1,0 +1,371 @@
+/* Modul 1 — Vətəndaş Təhlükəsizlik tətbiqi */
+(function () {
+  const { api, esc, connectStream, fmtDist, fmtMin, fmtNum, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
+    createMap, shelterIcon, toast, t } = window.UCE;
+  const $ = (id) => document.getElementById(id);
+  const SOS_TYPES = ["fire", "collapse", "flood", "medical"];
+
+  // Anonim cihaz identifikatoru (şəxsi məlumat toplanmır)
+  function citizenId() {
+    let id = null;
+    try { id = localStorage.getItem("uce_cid"); } catch (e) { /* ignore */ }
+    if (!id) {
+      const bytes = new Uint8Array(12);
+      crypto.getRandomValues(bytes);
+      id = "c-" + Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+      try { localStorage.setItem("uce_cid", id); } catch (e) { /* ignore */ }
+    }
+    return id;
+  }
+
+  const state = {
+    cid: citizenId(), meta: null, pos: null, plan: null, selectedId: null, loading: false,
+    citizen: { status: "unknown", active_sos: [], shelter_id: null }, degraded: false, banners: [], conn: "reconnect",
+    closures: [],
+  };
+  let map, meMarker, routeLayer, routeCasing, roadsLayer, closuresLayer, sheltersLayer;
+
+  // ---------- Xəritə ----------
+  function initMap() {
+    const c = state.meta.city;
+    map = createMap("map", c.center, c.zoom, false);
+    roadsLayer = L.layerGroup().addTo(map);
+    closuresLayer = L.layerGroup().addTo(map);
+    sheltersLayer = L.layerGroup().addTo(map);
+    map.on("click", (e) => setPosition(e.latlng.lat, e.latlng.lng, true));
+    setTimeout(() => map.invalidateSize(), 200);
+    window.addEventListener("resize", debounce(() => map.invalidateSize(), 150));
+  }
+
+  async function loadRoads() {
+    try {
+      const data = await api("/roads");
+      roadsLayer.clearLayers();
+      data.edges.forEach((e) => L.polyline(e.points, { color: "#93A1B3", weight: 2.500, opacity: .75, interactive: false }).addTo(roadsLayer));
+      state.closures = data.closures;
+      setDegraded(data.routing.degraded);
+      drawClosures();
+    } catch (e) { /* xəritə yolsuz da işləyir */ }
+  }
+
+  function drawClosures() {
+    closuresLayer.clearLayers();
+    state.closures.forEach((c) => {
+      L.polyline(c.points, { color: "#E0282E", weight: 5, opacity: .95, dashArray: "8 8" })
+        .bindTooltip(esc(c.name) + " — " + t("legend.closed")).addTo(closuresLayer);
+    });
+  }
+
+  function drawShelters() {
+    sheltersLayer.clearLayers();
+    if (!state.plan) return;
+    state.plan.shelters.forEach((s) => {
+      L.marker([s.lat, s.lon], { icon: shelterIcon(s, s.id === state.selectedId), zIndexOffset: s.id === state.selectedId ? 500 : 0 })
+        .on("click", () => selectShelter(s.id)).bindTooltip(esc(s.name)).addTo(sheltersLayer);
+    });
+  }
+
+  function drawRoute(fit) {
+    if (routeLayer) { map.removeLayer(routeLayer); map.removeLayer(routeCasing); routeLayer = routeCasing = null; }
+    const s = selected();
+    if (!s || !s.route) return;
+    routeCasing = L.polyline(s.route.points, { color: "#fff", weight: 9, opacity: .95, lineJoin: "round" }).addTo(map);
+    routeLayer = L.polyline(s.route.points, { color: "#2563EB", weight: 5, opacity: 1, lineJoin: "round" }).addTo(map);
+    if (fit) map.fitBounds(routeLayer.getBounds(), { padding: [50, 50], maxZoom: 16 });
+  }
+
+  function selected() {
+    return state.plan ? state.plan.shelters.find((s) => s.id === state.selectedId) : null;
+  }
+
+  // ---------- Yerləşmə və plan ----------
+  function setPosition(lat, lon, fromMap) {
+    state.pos = { lat, lon };
+    if (!meMarker) {
+      meMarker = L.marker([lat, lon], { icon: L.divIcon({ className: "", html: '<div class="mk-me"></div>', iconSize: [20, 20], iconAnchor: [10, 10] }), zIndexOffset: 1000 }).addTo(map);
+    } else meMarker.setLatLng([lat, lon]);
+    meMarker.bindTooltip(t("loc.you"));
+    if (fromMap) $("district").value = "";
+    state.banners = state.banners.filter((b) => b.kind !== "reroute");
+    loadPlan({ fit: true });
+  }
+
+  async function loadPlan(opts) {
+    opts = opts || {};
+    if (!state.pos) return;
+    if (!state.plan) { state.loading = true; renderPlan(); }
+    try {
+      const q = "lat=" + state.pos.lat.toFixed(6) + "&lon=" + state.pos.lon.toFixed(6) + "&citizen_id=" + state.cid;
+      applyPlan(await api("/evacuation?" + q), opts);
+    } catch (e) {
+      state.loading = false;
+      if (!state.plan) renderPlan(t("common.error"));
+    }
+  }
+
+  function applyPlan(plan, opts) {
+    opts = opts || {};
+    const prevSelected = state.selectedId;
+    const prevRec = state.plan && state.plan.recommended ? state.plan.recommended.shelter_id : null;
+    state.plan = plan;
+    state.loading = false;
+    setDegraded(plan.routing.degraded);
+    const rec = plan.recommended;
+    const keep = !plan.rerouted && !opts.fit && prevSelected && prevSelected !== prevRec && plan.shelters.some((s) => s.id === prevSelected && s.route);
+    state.selectedId = keep ? prevSelected : (rec ? rec.shelter_id : null);
+    if (plan.rerouted) pushReroute(plan);
+    renderAll(opts.fit || plan.rerouted);
+  }
+
+  function pushReroute(plan) {
+    let text = t("reroute.road_closed");
+    if (plan.reroute_reason === "shelter_full" && plan.previous_shelter) {
+      text = t("reroute.shelter_full", { old: plan.previous_shelter.name, pct: Math.round(plan.previous_shelter.occupancy_pct), new: plan.recommended.name });
+    }
+    state.banners = state.banners.filter((b) => b.kind !== "reroute");
+    state.banners.unshift({ kind: "reroute", title: t("reroute.title"), text });
+    if (navigator.vibrate) navigator.vibrate([120, 60, 120]);
+    $("panel").scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function selectShelter(id) {
+    state.selectedId = id;
+    renderAll(true);
+  }
+
+  function setDegraded(flag) {
+    if (state.degraded === flag) return;
+    state.degraded = flag;
+    renderBanners();
+  }
+
+  // ---------- Render ----------
+  function renderAll(fit) {
+    renderBanners(); renderStatus(); renderPlan(); drawShelters(); drawRoute(fit);
+  }
+
+  function renderBanners() {
+    const parts = [];
+    if (state.degraded) {
+      parts.push('<div class="banner banner-degraded"><span class="b-ico">' + ICON.signal + "</span><div><b>" + esc(t("degraded.title")) +
+        "</b><p>" + esc(t("degraded.text")) + "</p></div><span></span></div>");
+    }
+    state.banners.forEach((b, i) => {
+      parts.push('<div class="banner banner-' + (b.kind === "reroute" ? "reroute" : "info") + '"><span class="b-ico">' + (b.kind === "reroute" ? ICON.route : ICON.shelter) +
+        "</span><div><b>" + esc(b.title) + "</b><p>" + esc(b.text) + '</p></div><button class="b-x" type="button" data-dismiss="' + i +
+        '" aria-label="' + esc(t("common.close")) + '">' + ICON.close + "</button></div>");
+    });
+    $("banners").innerHTML = parts.join("");
+  }
+
+  function renderStatus() {
+    const c = state.citizen;
+    const box = $("statusCard");
+    if (c.active_sos && c.active_sos.length) {
+      const s = c.active_sos[0];
+      const line = s.status === "assigned" && s.brigade_name
+        ? '<div class="st-line">' + ICON.brigade + "<span>" + esc(t("sos.assigned", { name: s.brigade_name })) + "</span></div>" : "";
+      box.innerHTML = '<div class="status-card is-sos" role="status"><h3>' + ICON[s.type] + "<span>" + esc(t("sos.sent")) + " · " +
+        esc(t("sos.type." + s.type)) + "</span></h3><p>" + esc(t("sos.wait")) + "</p>" + line + "</div>";
+    } else if (c.status === "safe") {
+      const sh = state.safeShelterName ? '<div class="st-line">' + ICON.shelter + "<span>" + esc(t("safe.at", { name: state.safeShelterName })) + "</span></div>" : "";
+      box.innerHTML = '<div class="status-card is-safe" role="status"><h3>' + ICON.check + "<span>" + esc(t("safe.done")) + "</span></h3><p>" +
+        esc(t("safe.text")) + "</p>" + sh + '<button class="btn btn-sm" type="button" id="undoSafe">' + esc(t("safe.undo")) + "</button></div>";
+    } else box.innerHTML = "";
+  }
+
+  function occBar(s) {
+    return '<div class="bar" style="--c:' + levelColor(s) + '"><i style="width:' + Math.min(100, s.occupancy_pct) + '%"></i></div>';
+  }
+
+  function renderPlan(error) {
+    const box = $("planBox");
+    if (error) { box.innerHTML = '<div class="card empty">' + esc(error) + '<br><button class="btn btn-sm" id="retryPlan" type="button">' + esc(t("common.retry")) + "</button></div>"; return; }
+    if (state.loading) { box.innerHTML = '<div class="skeleton"></div>'; return; }
+    if (!state.plan) { box.innerHTML = '<div class="card empty"><span class="e-ico">' + ICON.pin + "</span>" + esc(t("plan.empty")) + "</div>"; return; }
+    const plan = state.plan;
+    if (!plan.shelters.length) { box.innerHTML = '<div class="card empty">' + esc(t("plan.none")) + "</div>"; return; }
+
+    const s = selected();
+    const rec = plan.recommended;
+    let html = "";
+    if (s) {
+      const isRec = rec && rec.shelter_id === s.id;
+      const free = Math.max(0, s.capacity - s.occupancy);
+      const r = s.route;
+      html += '<section class="card rec"><h2 class="card-title"><span class="ti">' + ICON.route + "</span>" +
+        esc(t(isRec ? "plan.recommended" : "plan.selected")) + "</h2>" +
+        '<div class="rec-head"><span class="rec-ico" style="--c:' + levelColor(s) + '">' + ICON[TYPE_ICON[s.type]] + '</span><div><div class="rec-name">' + esc(s.name) +
+        '</div><div class="rec-meta">' + esc(t("type." + s.type)) + " · " + esc(districtName(s.district_id)) + "</div></div></div>" +
+        '<div class="rec-stats"><div class="stat"><b>' + (r ? esc(fmtMin(r.duration_min)) : "—") + "</b><span>" + esc(t("plan.walk")) + "</span></div>" +
+        '<div class="stat"><b>' + (r ? esc(fmtDist(r.distance_m)) : esc(fmtDist(s.distance_m))) + "</b><span>" + esc(t("plan.route")) + "</span></div>" +
+        '<div class="stat"><b>' + esc(fmtNum(free)) + "</b><span>" + esc(t("plan.free")) + "</span></div></div>" +
+        '<div class="occ-row"><span>' + esc(t("plan.occupancy")) + '</span><b>' + s.occupancy_pct + "% · " + fmtNum(s.occupancy) + " / " + fmtNum(s.capacity) + "</b></div>" + occBar(s);
+      if (isRec && rec.reason !== "nearest") html += '<p class="note">' + esc(t("plan.reason." + rec.reason)) + "</p>";
+      if (r && r.steps && r.steps.length) {
+        html += '<ol class="steps" aria-label="' + esc(t("plan.steps")) + '">' + r.steps.map((st) => "<li><span>" + esc(st.road) + "</span><span>" + esc(fmtDist(st.distance_m)) + "</span></li>").join("") + "</ol>";
+      } else if (r) html += '<ol class="steps"><li><span>' + esc(t("plan.direct")) + "</span><span>" + esc(fmtDist(r.distance_m)) + "</span></li></ol>";
+      else html += '<p class="note">' + esc(t("plan.no_route")) + "</p>";
+      html += '<button class="btn btn-success btn-block" type="button" id="arriveBtn">' + ICON.check + "<span>" + esc(t("plan.arrived")) + "</span></button></section>";
+    }
+
+    html += '<section><h2 class="card-title" style="margin:4px 2px 10px"><span class="ti">' + ICON.pin + "</span>" + esc(t("plan.nearest")) + '</h2><div class="list">';
+    plan.shelters.forEach((sh) => {
+      const full = !sh.accepting;
+      const sub = (sh.route ? fmtMin(sh.route.duration_min) + " · " + fmtDist(sh.route.distance_m) : t("plan.no_route")) + " · " + t("type." + sh.type);
+      html += '<button type="button" class="item' + (sh.id === state.selectedId ? " is-active" : "") + (full ? " is-full" : "") + '" data-shelter="' + esc(sh.id) + '" style="--c:' + levelColor(sh) + '">' +
+        '<span class="item-ico">' + ICON[TYPE_ICON[sh.type]] + '</span><span><span class="item-name">' + esc(sh.name) + '</span><span class="item-sub" style="display:block">' + esc(sub) + "</span>" + occBar(sh) +
+        '</span><span class="item-pct">' + Math.round(sh.occupancy_pct) + "%<small>" + (full ? esc(t("plan.full")) : esc(fmtNum(sh.capacity - sh.occupancy))) + "</small></span></button>";
+    });
+    html += "</div></section>";
+    box.innerHTML = html;
+  }
+
+  function renderLegend() {
+    const items = [["low", "<40%"], ["medium", "40–70%"], ["high", "70–90%"], ["full", "90–95%"], ["critical", ">95%"]];
+    $("legend").innerHTML = "<b>" + esc(t("legend.title")) + "</b>" + items.map((i) => '<span><i style="background:' + LEVEL_COLOR[i[0]] + '"></i>' + i[1] + "</span>").join("") +
+      '<span><i class="rt"></i>' + esc(t("legend.route")) + '</span><span><i class="ln"></i>' + esc(t("legend.closed")) + "</span>";
+  }
+
+  function renderConn() {
+    $("connDot").className = "dot " + (state.conn === "live" ? "is-live" : state.conn === "offline" ? "is-off" : "is-wait");
+    $("connText").textContent = t(state.conn === "live" ? "conn.live" : state.conn === "offline" ? "conn.offline" : "conn.reconnect");
+  }
+
+  function districtName(id) {
+    const d = state.meta.districts.find((x) => x.id === id);
+    return d ? d.name : "";
+  }
+
+  function fillDistricts() {
+    const sel = $("district");
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">' + esc(t("loc.district")) + "</option>" +
+      state.meta.districts.map((d) => '<option value="' + esc(d.id) + '">' + esc(d.name) + "</option>").join("");
+    sel.value = cur;
+  }
+
+  // ---------- SOS və status ----------
+  function openSheet() {
+    if (!state.pos) { toast(t("sos.need_location"), "error"); $("district").focus(); return; }
+    $("sosGrid").innerHTML = SOS_TYPES.map((type) => '<button type="button" class="sos-type" data-sos="' + type + '">' + ICON[type] + "<span>" + esc(t("sos.type." + type)) + "</span></button>").join("");
+    $("sosSheet").hidden = false;
+    const first = $("sosGrid").querySelector("button");
+    if (first) first.focus();
+  }
+  function closeSheet() { $("sosSheet").hidden = true; $("sosBtn").focus(); }
+
+  async function sendSos(type) {
+    const note = $("sosNote").value.trim();
+    closeSheet();
+    try {
+      await api("/sos", { method: "POST", body: { citizen_id: state.cid, type, lat: state.pos.lat, lon: state.pos.lon, note } });
+      $("sosNote").value = "";
+      toast(t("sos.sent"), "success");
+      if (navigator.vibrate) navigator.vibrate(200);
+      await loadCitizen();
+    } catch (e) {
+      toast(t(e.status === 429 ? "sos.rate" : "sos.error"), "error");
+    }
+  }
+
+  async function markSafe(shelterId) {
+    try {
+      const body = { citizen_id: state.cid, status: "safe" };
+      if (shelterId) body.shelter_id = shelterId;
+      if (state.pos) { body.lat = state.pos.lat; body.lon = state.pos.lon; }
+      const res = await api("/status", { method: "POST", body });
+      state.safeShelterName = res.shelter ? res.shelter.name : null;
+      toast(t("safe.done"), "success");
+      await loadCitizen();
+      $("panel").scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) { toast(t("common.error"), "error"); }
+  }
+
+  async function undoSafe() {
+    try {
+      await api("/status", { method: "POST", body: { citizen_id: state.cid, status: "evacuating" } });
+      state.safeShelterName = null;
+      await loadCitizen();
+      loadPlan();
+    } catch (e) { toast(t("common.error"), "error"); }
+  }
+
+  async function loadCitizen() {
+    try { state.citizen = await api("/citizens/" + state.cid); } catch (e) { /* ignore */ }
+    renderStatus();
+  }
+
+  // ---------- Canlı hadisələr ----------
+  const refreshPlan = debounce(() => loadPlan(), 400);
+  function onEvent(name, data) {
+    if (name === "reroute") applyPlan(data.plan, {});
+    else if (name === "shelter_update") {
+      if (data.opened && data.shelter) {
+        state.banners = state.banners.filter((b) => b.kind !== "opened");
+        state.banners.push({ kind: "opened", title: t("plan.nearest"), text: t("reroute.new_shelter", { name: data.shelter.name }) });
+        renderBanners();
+      }
+      refreshPlan();
+    } else if (name === "road_update") { state.closures = data.closures || []; drawClosures(); refreshPlan(); }
+    else if (name === "routing_status") { setDegraded(!!data.degraded); refreshPlan(); }
+    else if (name === "sos_assigned" || name === "sos_resolved") {
+      if (name === "sos_resolved") toast(t("sos.resolved"));
+      loadCitizen();
+    } else if (name === "reset") { state.banners = []; loadRoads(); loadCitizen(); refreshPlan(); }
+  }
+
+  // ---------- Başlanğıc ----------
+  function bind() {
+    $("district").addEventListener("change", (e) => {
+      const d = state.meta.districts.find((x) => x.id === e.target.value);
+      if (d) { setPosition(d.lat, d.lon, false); }
+    });
+    $("gpsBtn").addEventListener("click", () => {
+      if (!navigator.geolocation) { toast(t("loc.gps_fail"), "error"); return; }
+      navigator.geolocation.getCurrentPosition(
+        (p) => { $("district").value = ""; setPosition(p.coords.latitude, p.coords.longitude, true); },
+        () => toast(t("loc.gps_fail"), "error"), { enableHighAccuracy: true, timeout: 8000 });
+    });
+    $("sosBtn").addEventListener("click", openSheet);
+    $("sosCancel").addEventListener("click", closeSheet);
+    $("sosSheet").addEventListener("click", (e) => { if (e.target === $("sosSheet")) closeSheet(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("sosSheet").hidden) closeSheet(); });
+    $("sosGrid").addEventListener("click", (e) => { const b = e.target.closest("[data-sos]"); if (b) sendSos(b.dataset.sos); });
+    $("safeBtn").addEventListener("click", () => markSafe(null));
+    $("planBox").addEventListener("click", (e) => {
+      const item = e.target.closest("[data-shelter]");
+      if (item) return selectShelter(item.dataset.shelter);
+      if (e.target.closest("#arriveBtn")) return markSafe(state.selectedId);
+      if (e.target.closest("#retryPlan")) return loadPlan({ fit: true });
+    });
+    $("statusCard").addEventListener("click", (e) => { if (e.target.closest("#undoSafe")) undoSafe(); });
+    $("banners").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-dismiss]");
+      if (b) { state.banners.splice(Number(b.dataset.dismiss), 1); renderBanners(); }
+    });
+    window.I18N.onChange(() => { fillDistricts(); renderLegend(); renderConn(); renderAll(false); drawClosures(); });
+  }
+
+  async function start() {
+    $("brandMark").innerHTML = ICON.shield;
+    $("icoLoc").innerHTML = ICON.pin;
+    $("icoGps").innerHTML = ICON.gps;
+    $("icoSafe").innerHTML = ICON.check;
+    renderConn();
+    try {
+      state.meta = await api("/meta");
+    } catch (e) {
+      $("planBox").innerHTML = '<div class="card empty">' + esc(t("conn.offline")) + '<br><button class="btn btn-sm" type="button" id="reloadBtn">' + esc(t("common.retry")) + "</button></div>";
+      $("planBox").addEventListener("click", (ev) => { if (ev.target.closest("#reloadBtn")) location.reload(); });
+      return;
+    }
+    initMap(); fillDistricts(); renderLegend(); bind(); renderPlan();
+    loadRoads(); loadCitizen();
+    connectStream("/api/v1/stream?citizen_id=" + state.cid, onEvent, (s) => { state.conn = s; renderConn(); if (s === "live" && state.pos) refreshPlan(); });
+    // SSE kəsilsə belə məlumat köhnəlməsin
+    setInterval(() => { if (state.conn !== "live" && state.pos) loadPlan(); }, 8000);
+  }
+
+  document.addEventListener("DOMContentLoaded", start);
+})();

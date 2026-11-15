@@ -1,1 +1,101 @@
-<html></html>
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0A121C">
+  <title>Dispetçer Paneli — Urban Crisis &amp; Crowd Evacuation Engine</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/dispatcher.css">
+</head>
+<body class="disp">
+  <header class="d-top">
+    <a class="brand" href="/" data-i18n-title="common.back"><span class="brand-mark" id="brandMark"></span><span class="d-title" data-i18n="d.title">Fövqəladə Hallar Dispetçer Paneli</span></a>
+    <div class="d-top-right">
+      <span class="chip d-chip" id="routingChip"></span>
+      <span class="chip d-chip"><span class="dot" id="connDot"></span><span id="connText"></span></span>
+      <span class="d-clock num" id="clock"></span>
+      <div class="menu" id="simMenu" hidden>
+        <button class="btn btn-sm d-btn" id="simBtn" type="button" aria-haspopup="true" aria-expanded="false"><span id="icoPlay"></span><span data-i18n="d.sim.title">Simulyasiya</span></button>
+        <div class="menu-list" id="simList" hidden></div>
+      </div>
+      <div class="lang-switch" data-lang-switch></div>
+      <button class="btn btn-sm d-btn" id="logoutBtn" type="button" hidden><span id="userName"></span><span id="icoLogout"></span></button>
+    </div>
+  </header>
+
+  <div id="alertStrip" aria-live="assertive"></div>
+
+  <main class="d-main" id="main" hidden>
+    <section class="d-kpis" id="kpis" aria-label="KPI"></section>
+
+    <div class="d-grid">
+      <section class="panel d-sos">
+        <div class="panel-head">
+          <h2 data-i18n="d.sos.title">SOS siqnalları</h2>
+          <div class="seg" id="sosFilter">
+            <button type="button" data-filter="active" class="is-active" data-i18n="d.sos.filter.active">Aktiv</button>
+            <button type="button" data-filter="all" data-i18n="d.sos.filter.all">Hamısı</button>
+          </div>
+        </div>
+        <div class="panel-body scroll" id="sosList"></div>
+      </section>
+
+      <section class="panel d-mapwrap" aria-label="Xəritə">
+        <div id="map"></div>
+        <div class="d-legend" id="legend"></div>
+      </section>
+
+      <div class="d-side">
+        <section class="panel">
+          <div class="panel-head"><h2 data-i18n="d.alerts.title">Həyəcanlar</h2></div>
+          <div class="panel-body scroll" id="alertList"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><h2 data-i18n="d.brigades.title">Xilasetmə briqadaları</h2></div>
+          <div class="panel-body scroll" id="brigadeList"></div>
+        </section>
+      </div>
+    </div>
+
+    <div class="d-grid2">
+      <section class="panel">
+        <div class="panel-head"><h2 data-i18n="d.zones.title">Zonalar üzrə vəziyyət</h2></div>
+        <div class="panel-body" id="zoneTable"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2 data-i18n="d.shelters.title">Toplanış məntəqələri</h2></div>
+        <div class="panel-body scroll tall" id="shelterTable"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2 data-i18n="d.charts.timeline">SOS axını (son 30 dəq)</h2></div>
+        <div class="panel-body" id="timeline"></div>
+        <div class="panel-head sub"><h2 data-i18n="d.charts.types">Aktiv SOS növləri</h2></div>
+        <div class="panel-body" id="typeChart"></div>
+        <div class="panel-head sub"><h2 data-i18n="d.roads.title">Bağlı yollar</h2></div>
+        <div class="panel-body" id="roadList"></div>
+      </section>
+    </div>
+  </main>
+
+  <div class="login" id="login" hidden>
+    <form class="login-card" id="loginForm" autocomplete="on">
+      <span class="brand-mark" id="loginMark"></span>
+      <h1 data-i18n="login.title">Dispetçer girişi</h1>
+      <label for="lUser" data-i18n="login.user">İstifadəçi adı</label>
+      <input id="lUser" name="username" class="d-input" autocomplete="username" required maxlength="64">
+      <label for="lPass" data-i18n="login.pass">Parol</label>
+      <input id="lPass" name="password" type="password" class="d-input" autocomplete="current-password" required maxlength="128">
+      <p class="login-err" id="loginErr" role="alert"></p>
+      <button class="btn btn-primary btn-block" type="submit" data-i18n="login.submit">Daxil ol</button>
+      <p class="login-demo" data-i18n="login.demo"></p>
+    </form>
+  </div>
+
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/js/i18n.js"></script>
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/dispatcher.js"></script>
+</body>
+</html>

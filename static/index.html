@@ -1,1 +1,46 @@
-<html></html>
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Təhlükəsiz Təxliyə — Urban Crisis &amp; Crowd Evacuation Engine</title>
+  <link rel="stylesheet" href="/static/css/base.css">
+</head>
+<body>
+  <div class="home">
+    <header class="home-top">
+      <div class="brand"><span class="brand-mark" id="brandMark"></span><span data-i18n="app.name">Təhlükəsiz Təxliyə</span></div>
+      <div class="lang-switch" data-lang-switch></div>
+    </header>
+    <main class="home-main">
+      <div class="home-inner">
+        <h1 data-i18n="app.tagline">Şəhər Böhranı və Kütləvi Təxliyə Sistemi</h1>
+        <p class="home-lead" data-i18n="home.lead"></p>
+        <div class="home-cards">
+          <a class="home-card is-citizen" href="/citizen">
+            <span class="ico" id="icoCitizen"></span>
+            <h2 data-i18n="home.citizen">Vətəndaş</h2>
+            <p data-i18n="home.citizen.desc"></p>
+            <span class="go"><span data-i18n="home.open">Aç</span> →</span>
+          </a>
+          <a class="home-card is-dispatch" href="/dispatcher">
+            <span class="ico" id="icoDispatch"></span>
+            <h2 data-i18n="home.dispatcher">Dispetçer</h2>
+            <p data-i18n="home.dispatcher.desc"></p>
+            <span class="go"><span data-i18n="home.open">Aç</span> →</span>
+          </a>
+        </div>
+        <div class="home-status">
+          <span data-i18n="home.status">Sistem vəziyyəti</span>
+          <span class="chip"><span class="dot" id="hDot"></span><span id="hText">…</span></span>
+          <span class="chip" id="hRouting"></span>
+        </div>
+      </div>
+    </main>
+    <footer class="home-foot">Urban Crisis &amp; Crowd Evacuation Engine · v1.0</footer>
+  </div>
+  <script src="/static/js/i18n.js"></script>
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/home.js"></script>
+</body>
+</html>

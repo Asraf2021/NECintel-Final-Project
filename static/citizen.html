@@ -1,1 +1,67 @@
-<html></html>
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0B1F33">
+  <title>Təhlükəsiz Təxliyə — Vətəndaş</title>
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/citizen.css">
+</head>
+<body class="citizen">
+  <header class="c-top">
+    <a class="brand" href="/" data-i18n-title="common.back"><span class="brand-mark" id="brandMark"></span><span data-i18n="app.name">Təhlükəsiz Təxliyə</span></a>
+    <div class="c-top-right">
+      <span class="chip c-conn"><span class="dot" id="connDot"></span><span id="connText"></span></span>
+      <div class="lang-switch" data-lang-switch></div>
+    </div>
+  </header>
+
+  <div class="c-layout">
+    <section class="c-map" aria-label="Xəritə">
+      <div id="map"></div>
+      <div class="c-legend" id="legend"></div>
+    </section>
+
+    <aside class="c-panel" id="panel">
+      <div id="banners" aria-live="assertive"></div>
+      <div id="statusCard"></div>
+
+      <section class="card">
+        <h2 class="card-title"><span class="ti" id="icoLoc"></span><span data-i18n="loc.title">Yerləşməniz</span></h2>
+        <div class="loc-row">
+          <label class="sr-only" for="district" data-i18n="loc.district">Rayon seçin</label>
+          <select id="district" class="select"></select>
+          <button class="btn" id="gpsBtn" type="button"><span id="icoGps"></span><span data-i18n="loc.gps">Mənim yerim</span></button>
+        </div>
+        <p class="hint" data-i18n="loc.hint">Və ya xəritədə nöqtəyə toxunun</p>
+      </section>
+
+      <div id="planBox"></div>
+    </aside>
+  </div>
+
+  <nav class="c-actions" aria-label="Təcili əməliyyatlar">
+    <button class="act act-sos" id="sosBtn" type="button"><span class="act-ring"></span><span class="act-label" data-i18n="sos.button">SOS</span></button>
+    <button class="act act-safe" id="safeBtn" type="button"><span id="icoSafe"></span><span data-i18n="safe.button">Təhlükəsizəm</span></button>
+  </nav>
+
+  <div class="sheet-backdrop" id="sosSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sosTitle">
+      <div class="sheet-grip"></div>
+      <h2 id="sosTitle" data-i18n="sos.title">Təhlükədəsiniz?</h2>
+      <p class="sheet-sub" data-i18n="sos.choose"></p>
+      <div class="sos-grid" id="sosGrid"></div>
+      <label class="sr-only" for="sosNote" data-i18n="sos.note"></label>
+      <input id="sosNote" class="input" maxlength="280" autocomplete="off" data-i18n-ph="sos.note">
+      <button class="btn btn-block" id="sosCancel" type="button" data-i18n="sos.cancel">Bağla</button>
+    </div>
+  </div>
+
+  <script src="/static/vendor/leaflet/leaflet.js"></script>
+  <script src="/static/js/i18n.js"></script>
+  <script src="/static/js/common.js"></script>
+  <script src="/static/js/citizen.js"></script>
+</body>
+</html>
