@@ -110,20 +110,24 @@
   function createMap(elId, center, zoom, dark) {
     const map = L.map(elId, { zoomControl: false, attributionControl: true }).setView(center, zoom);
     L.control.zoom({ position: "topright" }).addTo(map);
-    // Əsas plitə mənbəyi: OpenStreetMap (açar tələb etmir). Çox xəta olarsa — ehtiyat mənbəyə keçid.
-    const sources = [
-      { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opts: { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
-      { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", opts: { maxZoom: 19, subdomains: "abc", attribution: '&copy; OpenStreetMap, HOT' } },
-    ];
-    let idx = 0, errors = 0, layer = null;
-    function mount() {
-      if (layer) map.removeLayer(layer);
-      const src = sources[idx];
-      layer = L.tileLayer(src.url, Object.assign({ className: dark ? "tiles-dark" : "" }, src.opts)).addTo(map);
-      layer.on("tileerror", () => { errors += 1; if (errors >= 6 && idx < sources.length - 1) { idx += 1; errors = 0; mount(); } });
-      layer.on("tileload", () => { errors = 0; });
-    }
-    mount();
+    // Plitə mənbələri (API açarı tələb etmir). OSM-in istifadə siyasəti Referer başlığı tələb edir:
+    // plitə sorğularında yalnız saytın mənşəyi (origin) göndərilir — səhifə yolu deyil.
+    const cls = dark ? "tiles-dark" : "";
+    const bases = {
+      "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19, className: cls, referrerPolicy: "strict-origin-when-cross-origin",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      }),
+      "Esri": L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 19, className: cls, attribution: "Tiles &copy; Esri",
+      }),
+    };
+    let chosen = "OpenStreetMap";
+    try { chosen = localStorage.getItem("uce_tiles") || "OpenStreetMap"; } catch (e) { /* ignore */ }
+    (bases[chosen] || bases.OpenStreetMap).addTo(map);
+    // Mənbə əlçatmaz olsa (məs. şəbəkə bloklayır) — xəritənin sağ yuxarı küncündən bir kliklə dəyişmək olar
+    L.control.layers(bases, null, { position: "topright", collapsed: true }).addTo(map);
+    map.on("baselayerchange", (e) => { try { localStorage.setItem("uce_tiles", e.name); } catch (err) { /* ignore */ } });
     return map;
   }
 

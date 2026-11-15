@@ -33,11 +33,12 @@ MAX_BODY_BYTES = 64 * 1024
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
-    "Referrer-Policy": "no-referrer",
+    # Yalnız mənşə (origin) — səhifə yolu xarici sayta getmir; OSM plitə siyasəti Referer tələb edir
+    "Referrer-Policy": "strict-origin-when-cross-origin",
     "Permissions-Policy": "geolocation=(self), camera=(), microphone=()",
     "Content-Security-Policy": (
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.tile.openstreetmap.fr; "
+        "img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://server.arcgisonline.com; "
         "connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     ),
 }

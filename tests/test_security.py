@@ -254,7 +254,7 @@ def test_security_headers_present(client, path, status):
     assert r.status_code == status
     assert r.headers["X-Content-Type-Options"] == "nosniff"
     assert r.headers["X-Frame-Options"] == "DENY"
-    assert r.headers["Referrer-Policy"] == "no-referrer"
+    assert r.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"  # yalnız mənşə; OSM plitə siyasəti üçün
     csp = r.headers["Content-Security-Policy"]
     assert "default-src 'self'" in csp and "frame-ancestors 'none'" in csp
     assert "'unsafe-eval'" not in csp and "script-src 'self';" in csp
