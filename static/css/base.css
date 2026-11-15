@@ -235,8 +235,8 @@ html[data-theme="light"] .disp .leaflet-control-attribution { background: rgba(2
 html[data-theme="light"] .disp ::-webkit-scrollbar-thumb { background: #C5CEDA; }
 html[data-theme="dark"] .disp .leaflet-control-layers { background: #18263A; color: #E8EEF5; }
 /* Açıq temada KPI rəngləri (tünd fon üçün seçilmiş açıq tonlar) kontrastlı variantlarla əvəz olunur */
-html[data-theme="light"] .disp .kpi[style*="#FF5A5F"] { --k: #D92D20; }
-html[data-theme="light"] .disp .kpi[style*="#6EE7B7"] { --k: #12805C; }
-html[data-theme="light"] .disp .kpi[style*="#9EC0FF"] { --k: #1D4ED8; }
-html[data-theme="light"] .disp .kpi[style*="#C9B3FF"] { --k: #6D28D9; }
-html[data-theme="light"] .disp .kpi[style*="#FFD08A"] { --k: #A16207; }
+html[data-theme="light"] .disp .kpi[style*="#FF5A5F"] { --k: #D92D20 !important; }
+html[data-theme="light"] .disp .kpi[style*="#6EE7B7"] { --k: #12805C !important; }
+html[data-theme="light"] .disp .kpi[style*="#9EC0FF"] { --k: #1D4ED8 !important; }
+html[data-theme="light"] .disp .kpi[style*="#C9B3FF"] { --k: #6D28D9 !important; }
+html[data-theme="light"] .disp .kpi[style*="#FFD08A"] { --k: #A16207 !important; }
