@@ -21,7 +21,7 @@ from .context import AppContext, load_city
 from .core.db import Database
 from .core.events import EventBus
 from .core.graph import RoadGraph
-from .routers import auth, citizen, dispatcher
+from .routers import account, auth, citizen, dispatcher
 from .services import analytics, demo, evacuation
 from .services.replan import ReplanScheduler
 from .services.routing import RoutingService
@@ -50,16 +50,18 @@ class BodyLimitMiddleware:
     Gövdə kiçik olduğu üçün (≤ 64 KB) əvvəlcə tam oxunur, sonra tətbiqə ötürülür.
     """
 
-    def __init__(self, app, limit: int):
+    def __init__(self, app, limit: int, overrides: dict[str, int] | None = None):
         self.app = app
         self.limit = limit
+        self.overrides = overrides or {}  # yol -> xüsusi hədd (məs. arayış faylı)
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http" or scope["method"] not in ("POST", "PUT", "PATCH"):
             return await self.app(scope, receive, send)
+        limit = self.overrides.get(scope.get("path", ""), self.limit)
         headers = dict(scope.get("headers") or [])
         length = headers.get(b"content-length", b"")
-        if length.isdigit() and int(length) > self.limit:
+        if length.isdigit() and int(length) > limit:
             return await self._reject(send)
         chunks, total = [], 0
         while True:
@@ -68,7 +70,7 @@ class BodyLimitMiddleware:
                 return
             body = message.get("body", b"")
             total += len(body)
-            if total > self.limit:
+            if total > limit:
                 return await self._reject(send)
             chunks.append(body)
             if not message.get("more_body", False):
@@ -119,6 +121,10 @@ async def _traffic_loop(ctx: AppContext) -> None:
 
 
 def create_app(db_path: str | None = None, start_background: bool = True) -> FastAPI:
+    from mock_mygov.main import create_mock_mygov_app
+    from .services import identity
+    mock_mygov_app = create_mock_mygov_app()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         city = load_city(settings.city_file)
@@ -134,6 +140,7 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
         ctx.replan = ReplanScheduler(ctx, inline=not start_background)
         ctx.replan.start()
         app.state.ctx = ctx
+        app.state.mygov = identity.build_provider(mock_mygov_app)
         app.state.started_at = time.time()
         await routing.sync_traffic()
         task = asyncio.create_task(_traffic_loop(ctx)) if start_background else None
@@ -145,6 +152,8 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
             demo.stop_inflow(ctx)
             await ctx.replan.stop()
             await client.aclose()
+            if app.state.mygov:
+                await app.state.mygov.client.aclose()
             db.close()
 
     app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
@@ -165,7 +174,8 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
         return response
 
     # Ən xarici qat: gövdə ölçüsü həddi (Content-Length və chunked axın üçün eyni qayda)
-    app.add_middleware(BodyLimitMiddleware, limit=MAX_BODY_BYTES)
+    app.add_middleware(BodyLimitMiddleware, limit=MAX_BODY_BYTES,
+                       overrides={"/api/v1/me/disability/certificate": settings.max_upload_bytes})
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):
@@ -175,6 +185,9 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
     app.include_router(citizen.router)
     app.include_router(auth.router)
     app.include_router(dispatcher.router)
+    app.include_router(account.router)
+    if settings.mygov_mode == "mock":
+        app.mount("/mock-mygov", mock_mygov_app)  # simulyasiya olunmuş myGov (brauzer yönləndirməsi üçün)
 
     @app.get("/health", tags=["system"])
     def health(request: Request):

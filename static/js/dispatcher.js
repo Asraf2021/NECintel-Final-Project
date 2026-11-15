@@ -6,7 +6,7 @@
   const RISK_TAG = { low: "green", medium: "blue", high: "amber", critical: "red" };
   const BRIGADE_TAG = { available: "green", dispatched: "amber", on_scene: "violet", busy: "", offline: "" };
 
-  const state = { token: null, user: null, data: null, filter: "active", conn: "reconnect", stream: null, roadsDrawn: false, fitted: false };
+  const state = { verifs: [], token: null, user: null, data: null, filter: "active", conn: "reconnect", stream: null, roadsDrawn: false, fitted: false };
   try { state.token = sessionStorage.getItem("uce_token"); } catch (e) { /* ignore */ }
   let map, layers = {};
 
@@ -83,6 +83,9 @@
     inflight = true;
     try {
       state.data = await call("/dispatch/overview");
+      if (can("verification:manage")) {
+        try { state.verifs = (await call("/dispatch/verifications")).verifications; } catch (e) { state.verifs = []; }
+      }
       render();
     } catch (e) { /* call() xəbər verir */ } finally {
       inflight = false;
@@ -204,7 +207,7 @@
   function render() {
     if (!state.data) return;
     renderAlertStrip(); renderKpis(); renderSos(); renderAlerts(); renderBrigades(); renderZones(); renderShelters();
-    renderCharts(); renderRoads(); renderRouting(); drawMap();
+    renderCharts(); renderRoads(); renderVerifs(); renderRouting(); drawMap();
   }
 
   function alertText(a) {
@@ -263,7 +266,10 @@
           '<button class="btn-xs" type="button" data-resolve="' + s.id + '">' + esc(t("d.sos.resolve")) + "</button></div>";
       }
       const brig = s.brigade_id && brigades[s.brigade_id] ? " · " + esc(brigades[s.brigade_id]) : "";
-      const prioRow = prio ? '<div class="sos-prio"><span class="tag violet">' + ICON.wheelchair + " " + esc(t("d.sos.priority")) + '</span><span class="tag">' + esc(t("d.sos.role." + s.citizen_role)) + "</span></div>" : "";
+      const ver = s.verification === "verified" ? '<span class="tag green">' + esc(t("d.ver.verified")) + "</span>"
+        : (s.verification === "pending_review" || s.verification === "mygov_record") ? '<span class="tag amber">' + esc(t("d.ver.pending")) + "</span>"
+          : '<span class="tag">' + esc(t("d.ver.unverified")) + "</span>";
+      const prioRow = prio ? '<div class="sos-prio"><span class="tag violet">' + ICON.wheelchair + " " + esc(t("d.sos.priority")) + '</span><span class="tag">' + esc(t("d.sos.role." + s.citizen_role)) + "</span>" + ver + "</div>" : "";
       return '<div class="sos-item ' + cls + '"><span class="sos-ico">' + (prio ? ICON.wheelchair : ICON[s.type]) + '</span><div>' + prioRow + '<div class="sos-row"><span class="sos-type">#' + s.id + " " +
         esc(t("sos.type." + s.type)) + '</span><span class="sos-time">' + esc(timeAgo(s.created_at)) + '</span></div><div class="sos-meta">' + esc(zoneName(s.district_id, s.district_name)) +
         ' · <span class="tag ' + tag + '">' + esc(t("d.sos.status." + s.status)) + "</span>" + brig + "</div>" +
@@ -365,6 +371,34 @@
       esc(t("d.roads.source." + c.source)) + "</span></span>" + (manage && c.source === "dispatcher" ? '<button class="btn-xs" type="button" data-open-road="' + esc(c.edge_id) + '">' + esc(t("d.roads.open")) + "</button>" : "") + "</div>").join("");
   }
 
+  // myGov əlillik təsdiqi növbəsi
+  function renderVerifs() {
+    const show = can("verification:manage");
+    $("verifHead").hidden = !show; $("verifList").hidden = !show;
+    if (!show) return;
+    if (!state.verifs.length) { $("verifList").innerHTML = '<div class="d-empty" style="padding:10px">' + esc(t("d.verif.empty")) + "</div>"; return; }
+    $("verifList").innerHTML = state.verifs.map((v) => {
+      const tag = v.disability_status === "pending_review" ? "amber" : v.disability_status === "mygov_record" ? "blue" : "";
+      const sub = [v.mygov_disability ? t("d.verif.group", { group: v.mygov_disability_group }) : "", v.certificate_uploaded ? "" : t("d.verif.no_file")].filter(Boolean).join(" · ");
+      return '<div class="road-item verif-item"><span><b>' + esc(v.full_name) + '</b> <span class="tag ' + tag + '">' + esc(t("acc.status." + v.disability_status)) +
+        "</span>" + (sub ? '<br><span class="sos-meta">' + esc(sub) + "</span>" : "") + '</span><span class="sos-btns" style="margin:0">' +
+        (v.certificate_uploaded ? '<button class="btn-xs" type="button" data-vview="' + esc(v.citizen_id) + '">' + esc(t("d.verif.view")) + "</button>" : "") +
+        '<button class="btn-xs pri" type="button" data-vdecide="approve" data-vid="' + esc(v.citizen_id) + '">' + esc(t("d.verif.approve")) + "</button>" +
+        '<button class="btn-xs" type="button" data-vdecide="reject" data-vid="' + esc(v.citizen_id) + '">' + esc(t("d.verif.reject")) + "</button></span></div>";
+    }).join("");
+  }
+
+  async function viewCertificate(cid) {
+    // Fayl icazə tələb edir: token başlıqla göndərilir, nəticə blob kimi yeni pəncərədə açılır
+    try {
+      const res = await fetch("/api/v1/dispatch/verifications/" + encodeURIComponent(cid) + "/certificate", { headers: { Authorization: "Bearer " + state.token } });
+      if (!res.ok) throw new Error("http_" + res.status);
+      const url = URL.createObjectURL(await res.blob());
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch (e) { toast(t("common.error"), "error"); }
+  }
+
   function renderRouting() {
     const r = state.data.routing;
     const chip = $("routingChip");
@@ -423,7 +457,9 @@
           toast([ac.brigade ? t("d.alert.done_brigade", { name: ac.brigade.name, dist: fmtDist(ac.brigade.distance_m) }) : t("d.alert.no_brigade"),
             ac.new_shelter ? t("d.alert.done_shelter", { name: ac.new_shelter.name, cap: fmtNum(ac.new_shelter.capacity) }) : t("d.alert.no_shelter")].join(" · "), "success");
         }
-      } else if (ds.dismiss) action(() => call("/dispatch/alerts/" + ds.dismiss + "/dismiss", { method: "POST" }));
+      } else if (ds.vview) viewCertificate(ds.vview);
+      else if (ds.vdecide) action(() => call("/dispatch/verifications/" + encodeURIComponent(ds.vid) + "/" + ds.vdecide, { method: "POST" }), t("d.toast.done"));
+      else if (ds.dismiss) action(() => call("/dispatch/alerts/" + ds.dismiss + "/dismiss", { method: "POST" }));
       else if (ds.assign) {
         el.disabled = true;
         const res = await action(() => call("/dispatch/sos/" + ds.assign + "/assign", { method: "POST", body: {} }));

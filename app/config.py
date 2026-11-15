@@ -28,6 +28,21 @@ class Settings:
     rate_limit_login_per_min = int(_env("UCE_RATE_LOGIN_PER_MIN", "10"))
     rate_limit_general_per_min = int(_env("UCE_RATE_GENERAL_PER_MIN", "600"))
 
+    # --- myGov ilə qeydiyyat (mock | oidc | off) ---
+    mygov_mode = _env("UCE_MYGOV_MODE", "mock")
+    # FİN / provayder ID-sinin heşi üçün sabit açar (SECRET_KEY dəyişsə də şəxs öz hesabına uyğun gəlsin)
+    identity_pepper = _env("UCE_IDENTITY_PEPPER", "uce-identity-pepper-change-in-production")
+    mygov_authorize_url = _env("UCE_MYGOV_AUTHORIZE_URL", "")
+    mygov_token_url = _env("UCE_MYGOV_TOKEN_URL", "")
+    mygov_userinfo_url = _env("UCE_MYGOV_USERINFO_URL", "")
+    mygov_client_id = _env("UCE_MYGOV_CLIENT_ID", "")
+    mygov_client_secret = _env("UCE_MYGOV_CLIENT_SECRET", "")
+    # Əlillik arayışı xidmətinin ünvanı (dəqiq xidmət linki məlum olduqda env ilə dəyişdirilir)
+    mygov_certificate_url = _env("UCE_MYGOV_CERTIFICATE_URL", "https://mygov.az")
+    citizen_token_ttl_seconds = int(_env("UCE_CITIZEN_TOKEN_TTL", "604800"))
+    upload_dir = _env("UCE_UPLOAD_DIR", str(BASE_DIR / "data" / "uploads"))
+    max_upload_bytes = int(_env("UCE_MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
+
     # --- Biznes qaydaları (tapşırıqdakı hədlər) ---
     shelter_reroute_pct = float(_env("UCE_SHELTER_REROUTE_PCT", "90"))   # >= 90% -> alternativ marşrut
     shelter_critical_pct = float(_env("UCE_SHELTER_CRITICAL_PCT", "95"))  # > 95% -> Qırmızı Həyəcan

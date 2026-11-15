@@ -47,11 +47,14 @@ def create_sos(ctx: AppContext, citizen_id: str, sos_type: str, lat: float, lon:
 
 def list_sos(ctx: AppContext, status: str | None = None, limit: int = 200) -> list[dict]:
     # Sıralama: əvvəl aktiv Kritik Prioritet (Priority #1), sonra ən yenilər
-    order = " ORDER BY (status IN ('active','assigned') AND priority=1) DESC, created_at DESC LIMIT ?"
+    # Əlillik statusunun təsdiqi (myGov) dispetçerə SOS kartında göstərilir
+    base = ("SELECT s.*, COALESCE(a.disability_status, 'none') AS verification FROM sos_signals s"
+            " LEFT JOIN citizen_accounts a ON a.citizen_id = s.citizen_id")
+    order = " ORDER BY (s.status IN ('active','assigned') AND s.priority=1) DESC, s.created_at DESC LIMIT ?"
     if status:
-        rows = ctx.db.query("SELECT * FROM sos_signals WHERE status=?" + order, (status, limit))
+        rows = ctx.db.query(base + " WHERE s.status=?" + order, (status, limit))
     else:
-        rows = ctx.db.query("SELECT * FROM sos_signals" + order, (limit,))
+        rows = ctx.db.query(base + order, (limit,))
     return [_sos_out(ctx, s) for s in rows]
 
 

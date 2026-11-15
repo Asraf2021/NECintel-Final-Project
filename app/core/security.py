@@ -19,8 +19,11 @@ from ..config import settings
 ROLES: dict[str, set[str]] = {
     "dispatcher": {
         "ops:read", "sos:manage", "alert:decide", "shelter:manage", "brigade:manage", "road:manage", "demo:run",
+        "verification:manage",
     },
     "admin": {"*"},
+    # myGov ilə daxil olmuş vətəndaş: yalnız öz məlumatları (dispetçer endpoint-lərinə çıxışı yoxdur)
+    "citizen": {"citizen:self"},
 }
 
 

@@ -11,7 +11,7 @@ from ..core.security import client_ip, limiter, rate_limit
 from ..core.roles import CITIZEN_ROLES
 from ..core.graph import PROFILES
 from ..schemas import SOS_TYPES, SHELTER_TYPES, ProfileUpdate, SosCreate, StatusUpdate
-from ..services import analytics, evacuation, shelters as shelter_svc, sos as sos_svc
+from ..services import analytics, evacuation, identity, shelters as shelter_svc, sos as sos_svc
 
 router = APIRouter(prefix="/api/v1", tags=["citizen"], dependencies=[rate_limit("general", "rate_limit_general_per_min")])
 
@@ -50,7 +50,7 @@ def shelters(district_id: str | None = Query(default=None, max_length=32),
 
 
 @router.get("/evacuation")
-async def evacuation_plan(lat: float | None = Query(default=None, ge=-90, le=90),
+async def evacuation_plan(request: Request, lat: float | None = Query(default=None, ge=-90, le=90),
                           lon: float | None = Query(default=None, ge=-180, le=180),
                           district_id: str | None = Query(default=None, max_length=32),
                           citizen_id: str | None = Query(default=None, pattern=CITIZEN_ID_RE),
@@ -60,6 +60,7 @@ async def evacuation_plan(lat: float | None = Query(default=None, ge=-90, le=90)
 
     Rol citizen_id-nin saxlanılmış profilindən götürülür; anonim sorğu üçün `role` parametri verilə bilər.
     """
+    identity.ensure_owner(ctx, request, citizen_id)
     if lat is None or lon is None:
         d = ctx.district(district_id) if district_id else None
         if not d:
@@ -71,6 +72,7 @@ async def evacuation_plan(lat: float | None = Query(default=None, ge=-90, le=90)
 @router.post("/sos", status_code=201)
 def send_sos(body: SosCreate, request: Request, ctx: AppContext = Depends(get_ctx)):
     """Bir kliklə SOS. IP və vətəndaş üzrə limitlənir (spam / saxta həyəcana qarşı)."""
+    identity.ensure_owner(ctx, request, body.citizen_id)
     limit = settings.rate_limit_sos_per_min
     if not limiter.allow(f"sos-ip:{client_ip(request)}", limit * 5) or not limiter.allow(f"sos-c:{body.citizen_id}", limit):
         raise HTTPException(429, "rate_limit_exceeded", headers={"Retry-After": "60"})
@@ -80,8 +82,9 @@ def send_sos(body: SosCreate, request: Request, ctx: AppContext = Depends(get_ct
 
 
 @router.post("/status")
-async def update_status(body: StatusUpdate, ctx: AppContext = Depends(get_ctx)):
+async def update_status(body: StatusUpdate, request: Request, ctx: AppContext = Depends(get_ctx)):
     """"Təhlükəsizəm" statusu. Məntəqə seçilibsə, onun dolulugu yenilənir."""
+    identity.ensure_owner(ctx, request, body.citizen_id)
     result = sos_svc.set_status(ctx, body.citizen_id, body.status, body.shelter_id, body.lat, body.lon)
     analytics.invalidate()
     if result["shelter"] and not result["shelter"]["accepting"]:
@@ -90,15 +93,16 @@ async def update_status(body: StatusUpdate, ctx: AppContext = Depends(get_ctx)):
 
 
 @router.get("/citizens/{citizen_id}")
-def citizen(citizen_id: str, ctx: AppContext = Depends(get_ctx)):
+def citizen(citizen_id: str, request: Request, ctx: AppContext = Depends(get_ctx)):
     import re
     if not re.match(CITIZEN_ID_RE, citizen_id):
         raise HTTPException(422, "invalid_citizen_id")
+    identity.ensure_owner(ctx, request, citizen_id)
     return sos_svc.citizen_state(ctx, citizen_id)
 
 
 @router.put("/citizens/{citizen_id}/profile")
-async def update_profile(citizen_id: str, body: ProfileUpdate, ctx: AppContext = Depends(get_ctx)):
+async def update_profile(citizen_id: str, body: ProfileUpdate, request: Request, ctx: AppContext = Depends(get_ctx)):
     """Vətəndaş rolunu təyin edir: "priority_citizen" — Hərəkət Məhdudiyyətli / Xüsusi Qayğıya Ehtiyacı Olan.
 
     Bu rolda SOS avtomatik "Kritik Prioritet" alır, marşrut yalnız əlçatan yollarla qurulur.
@@ -106,6 +110,12 @@ async def update_profile(citizen_id: str, body: ProfileUpdate, ctx: AppContext =
     import re
     if not re.match(CITIZEN_ID_RE, citizen_id):
         raise HTTPException(422, "invalid_citizen_id")
+    identity.ensure_owner(ctx, request, citizen_id)
+    if identity.get_account(ctx, citizen_id):
+        # Qeydiyyatlı vətəndaş: rol hesabdakı əlillik xüsusiyyəti ilə sinxron dəyişir
+        result = identity.set_disability(ctx, citizen_id, body.role == "priority_citizen") | {"role": body.role}
+        analytics.invalidate()
+        return result
     result = sos_svc.set_profile(ctx, citizen_id, body.role)
     analytics.invalidate()
     return result
@@ -125,8 +135,12 @@ def roads(ctx: AppContext = Depends(get_ctx)):
 
 
 @router.get("/stream")
-async def stream(citizen_id: str | None = Query(default=None, pattern=CITIZEN_ID_RE),
+async def stream(request: Request, citizen_id: str | None = Query(default=None, pattern=CITIZEN_ID_RE),
                  ctx: AppContext = Depends(get_ctx)):
-    """Canlı hadisələr (SSE): doluluq, yol dəyişikliyi, fərdi yenidən marşrut."""
+    """Canlı hadisələr (SSE): doluluq, yol dəyişikliyi, fərdi yenidən marşrut.
+
+    Qeydiyyatlı vətəndaşın fərdi kanalı üçün token `?token=` ilə verilir (EventSource başlıq göndərə bilmir).
+    """
+    identity.ensure_owner(ctx, request, citizen_id)
     return StreamingResponse(ctx.bus.stream("public", citizen_id), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

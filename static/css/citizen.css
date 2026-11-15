@@ -176,3 +176,26 @@
 .status-card .st-priority svg { font-size: 18px; }
 .c-legend i.bn { width: 16px; height: 0; border-radius: 0; border-top: 4px dotted #F2A20C; }
 .note.note-fc { background: #FFF1F0; color: #8A1C12; }
+
+/* ----- myGov hesabı və əlillik təsdiqi ----- */
+.acc-card .acc-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.acc-card .acc-name { font-weight: 750; font-size: 16px; }
+.acc-card .acc-sub { font-size: 12px; color: var(--ink-2); margin-top: 2px; }
+.acc-card .acc-desc { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+.btn-mygov { background: #0B5CAD; border-color: #0B5CAD; color: #fff; width: 100%; }
+.ver-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--bg); color: var(--ink-2); }
+.ver-chip.is-verified { background: var(--green-soft); color: var(--green-dark); }
+.ver-chip.is-pending { background: var(--amber-soft); color: #6B4700; }
+.ver-chip.is-rejected { background: var(--red-soft); color: var(--red-dark); }
+.acc-actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.dis-sheet { text-align: center; }
+.dis-ico { width: 56px; height: 56px; margin: 0 auto; border-radius: 16px; background: #7C3AED; color: #fff; display: grid; place-items: center; font-size: 32px; }
+.dis-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
+.dis-step { font-size: 13px; color: var(--ink-2); text-align: left; margin: 4px 0; }
+.dis-mygov { border-color: #0B5CAD; color: #0B5CAD; text-decoration: none; font-weight: 700; }
+.dis-drop { display: grid; place-items: center; gap: 6px; border: 2px dashed #B9C4D2; border-radius: 14px; padding: 16px; cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.dis-drop:hover { border-color: var(--blue); }
+.dis-drop input { max-width: 100%; }
+.dis-msg { min-height: 18px; font-size: 13px; font-weight: 600; }
+.dis-msg.is-ok { color: var(--green-dark); }
+.dis-msg.is-err { color: var(--red-dark); }

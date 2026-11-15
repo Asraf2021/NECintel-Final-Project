@@ -43,7 +43,7 @@
       es.onopen = () => onState && onState("live");
       es.onerror = () => onState && onState(es.readyState === 2 ? "offline" : "reconnect");
       const names = ["hello", "shelter_update", "road_update", "reroute", "routing_status", "sos_new", "sos_update",
-        "sos_assigned", "sos_resolved", "sos_priority", "alert_new", "alert_update", "brigade_update", "citizen_status",
+        "sos_assigned", "sos_resolved", "sos_priority", "verification_update", "account_update", "alert_new", "alert_update", "brigade_update", "citizen_status",
         "reroute_batch", "reset", "broadcast"];
       names.forEach((name) => es.addEventListener(name, (ev) => {
         let payload = {};

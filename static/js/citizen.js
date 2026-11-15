@@ -1,6 +1,6 @@
 /* Modul 1 — Vətəndaş Təhlükəsizlik tətbiqi */
 (function () {
-  const { fcText, nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
+  const { fcText, nm, api: rawApi, esc, connectStream, fmtDist, fmtMin, fmtNum, debounce, levelColor, LEVEL_COLOR, ICON, TYPE_ICON,
     createMap, shelterIcon, toast, t } = window.UCE;
   const $ = (id) => document.getElementById(id);
   const SOS_TYPES = ["fire", "collapse", "flood", "medical"];
@@ -19,11 +19,17 @@
   }
 
   const state = {
-    cid: citizenId(), meta: null, pos: null, plan: null, selectedId: null, loading: false,
+    cid: citizenId(), ctoken: storedToken(), account: null, meta: null, pos: null, plan: null, selectedId: null, loading: false,
     citizen: { status: "unknown", active_sos: [], shelter_id: null }, degraded: false, banners: [], conn: "reconnect",
     closures: [], barriers: [], role: storedRole(),
   };
   let map, meMarker, routeLayer, routeCasing, roadsLayer, closuresLayer, sheltersLayer, barrierLayer;
+
+  // myGov ilə girişdən sonra verilən vətəndaş tokeni: bütün sorğulara avtomatik əlavə olunur
+  const api = (path, opts) => rawApi(path, Object.assign({ token: state.ctoken }, opts || {}));
+  function storedToken() {
+    try { return localStorage.getItem("uce_ctoken") || null; } catch (e) { return null; }
+  }
 
   function storedRole() {
     try { return localStorage.getItem("uce_role") === "priority_citizen" ? "priority_citizen" : "citizen"; } catch (e) { return "citizen"; }
@@ -100,6 +106,8 @@
   // ---------- Yerləşmə və plan ----------
   function setPosition(lat, lon, fromMap) {
     state.pos = { lat, lon };
+    // Son yerləşmə yadda saxlanılır (məs. myGov girişindən qayıdanda itməsin)
+    try { localStorage.setItem("uce_pos", JSON.stringify({ lat, lon, district: fromMap ? "" : $("district").value, ts: Date.now() })); } catch (e) { /* ignore */ }
     if (!meMarker) {
       meMarker = L.marker([lat, lon], { icon: L.divIcon({ className: "", html: '<div class="mk-me"></div>', iconSize: [20, 20], iconAnchor: [10, 10] }), zIndexOffset: 1000 }).addTo(map);
     } else meMarker.setLatLng([lat, lon]);
@@ -344,6 +352,7 @@
     try {
       await api("/citizens/" + state.cid + "/profile", { method: "PUT", body: { role } });
       state.role = role;
+      if (state.account) loadAccount(false);
       try { localStorage.setItem("uce_role", role); } catch (e) { /* ignore */ }
       renderRole();
       if (!quiet) toast(t(role === "priority_citizen" ? "role.saved_on" : "role.saved_off"), "success");
@@ -354,6 +363,145 @@
       toast(t("common.error"), "error");
       renderRole();
     }
+  }
+
+  function restorePosition() {
+    let saved = null;
+    try { saved = JSON.parse(localStorage.getItem("uce_pos") || "null"); } catch (e) { saved = null; }
+    if (!saved || Date.now() - saved.ts > 3600 * 1000) return;  // 1 saatdan köhnə yerləşmə istifadə olunmur
+    if (saved.district) $("district").value = saved.district;
+    setPosition(saved.lat, saved.lon, !saved.district);
+  }
+
+  // ---------- myGov hesabı və əlillik təsdiqi ----------
+  function handleAuthHash() {
+    const h = location.hash || "";
+    if (h.startsWith("#mygov=")) {
+      state.ctoken = decodeURIComponent(h.slice(7));
+      try { localStorage.setItem("uce_ctoken", state.ctoken); } catch (e) { /* ignore */ }
+    } else if (h.startsWith("#mygov_error=")) {
+      setTimeout(() => toast(t("acc.err"), "error"), 300);
+    }
+    if (h.startsWith("#mygov")) history.replaceState(null, "", location.pathname + location.search);
+  }
+
+  async function loadAccount(showPrompt) {
+    if (!state.ctoken) { state.account = null; renderAccount(); return; }
+    try {
+      const acc = await rawApi("/me", { token: state.ctoken });
+      state.account = acc;
+      if (acc.citizen_id !== state.cid) {  // hesab başqa cihazda yaradılıbsa, onun ID-si istifadə olunur
+        state.cid = acc.citizen_id;
+        try { localStorage.setItem("uce_cid", acc.citizen_id); } catch (e) { /* ignore */ }
+      }
+      const role = acc.disability_enabled ? "priority_citizen" : "citizen";
+      if (role !== state.role) {
+        state.role = role;
+        try { localStorage.setItem("uce_role", role); } catch (e) { /* ignore */ }
+        renderRole();
+        if (state.pos) loadPlan({ fit: true });
+      }
+      renderAccount();
+      if (showPrompt && acc.prompt_pending) openDis(1);
+    } catch (e) {
+      if (e.status === 401) {
+        state.ctoken = null; state.account = null;
+        try { localStorage.removeItem("uce_ctoken"); } catch (err) { /* ignore */ }
+        toast(t("acc.expired"), "error");
+      }
+      renderAccount();
+    }
+  }
+
+  function verChip(status) {
+    const cls = status === "verified" ? "is-verified" : status === "rejected" ? "is-rejected"
+      : (status === "pending_review" || status === "mygov_record" || status === "declared") ? "is-pending" : "";
+    return '<span class="ver-chip ' + cls + '">' + (status === "verified" ? ICON.check : ICON.wheelchair) + "<span>" + esc(t("acc.status." + status)) + "</span></span>";
+  }
+
+  function renderAccount() {
+    const box = $("accountCard");
+    const a = state.account;
+    if (!a) {
+      box.innerHTML = '<h2 class="card-title"><span class="ti">' + ICON.users + "</span>" + esc(t("acc.title")) + '</h2><p class="acc-desc">' + esc(t("acc.desc")) +
+        '</p><a class="btn btn-mygov" href="/api/v1/auth/mygov/start?citizen_id=' + encodeURIComponent(state.cid) + '">' + ICON.shield + "<span>" + esc(t("acc.login")) + "</span></a>";
+      return;
+    }
+    const canUpload = a.disability_enabled && a.disability_status !== "verified";
+    box.innerHTML = '<h2 class="card-title"><span class="ti">' + ICON.users + "</span>" + esc(t("acc.title")) + '</h2><div class="acc-row"><div><div class="acc-name">' +
+      esc(a.given_name + " " + a.family_name) + '</div><div class="acc-sub">' + esc(t("acc.via")) + (a.phone_masked ? " · " + esc(a.phone_masked) : "") + "</div></div>" +
+      verChip(a.disability_status) + '</div><div class="acc-actions">' +
+      (canUpload ? '<button class="btn btn-sm" type="button" id="accUpload">' + esc(t("acc.upload_link")) + "</button>" : "") +
+      '<button class="btn btn-sm btn-ghost" type="button" id="accLogout">' + ICON.logout + "<span>" + esc(t("acc.logout")) + "</span></button></div>";
+  }
+
+  function openDis(step) {
+    if (!state.account) { toast(t("dis.need_login"), "error"); return; }
+    $("disText").textContent = t("dis.text", { group: state.account.mygov_disability_group || "—" });
+    $("disMygovLink").href = state.account.certificate_service_url || "https://mygov.az";
+    $("disStep1").hidden = step !== 1;
+    $("disStep2").hidden = step !== 2;
+    $("disMsg").textContent = ""; $("disMsg").className = "dis-msg";
+    $("disModal").hidden = false;
+    const focus = step === 1 ? $("disConfirm") : $("disMygovLink");
+    if (focus) focus.focus();
+  }
+  function closeDis() { $("disModal").hidden = true; }
+
+  async function skipDis() {
+    try { state.account = await api("/me/disability/skip", { method: "POST" }); } catch (e) { /* ignore */ }
+    renderAccount(); closeDis();
+  }
+
+  async function confirmDis() {
+    try {
+      state.account = await api("/me/disability", { method: "PUT", body: { enabled: true } });
+      state.role = "priority_citizen";
+      try { localStorage.setItem("uce_role", state.role); } catch (e) { /* ignore */ }
+      renderRole(); renderAccount();
+      if (state.pos) loadPlan({ fit: true });
+      openDis(2);
+    } catch (e) { toast(t("common.error"), "error"); }
+  }
+
+  async function uploadCertificate() {
+    const f = $("disFile").files[0];
+    const msg = $("disMsg");
+    if (!f) { $("disFile").click(); return; }
+    const okType = ["application/pdf", "image/jpeg", "image/png"].includes(f.type);
+    if (!okType) { msg.textContent = t("dis.err_type"); msg.className = "dis-msg is-err"; return; }
+    if (f.size > 5 * 1024 * 1024) { msg.textContent = t("dis.err_size"); msg.className = "dis-msg is-err"; return; }
+    msg.textContent = t("dis.uploading"); msg.className = "dis-msg";
+    $("disUpload").disabled = true;
+    try {
+      const res = await fetch("/api/v1/me/disability/certificate", {
+        method: "POST", body: f, headers: { "Content-Type": f.type, Authorization: "Bearer " + state.ctoken },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        msg.textContent = t(res.status === 413 ? "dis.err_size" : res.status === 415 ? "dis.err_type" : "common.error");
+        msg.className = "dis-msg is-err";
+        return;
+      }
+      state.account = data;
+      renderAccount();
+      msg.textContent = t(data.disability_status === "verified" ? "dis.done_verified" : "dis.done_pending");
+      msg.className = "dis-msg is-ok";
+      setTimeout(closeDis, 2200);
+    } catch (e) {
+      msg.textContent = t("common.error"); msg.className = "dis-msg is-err";
+    } finally {
+      $("disUpload").disabled = false;
+    }
+  }
+
+  function logout() {
+    try {
+      localStorage.removeItem("uce_ctoken");
+      localStorage.removeItem("uce_cid");   // hesabdan çıxanda yeni anonim cihaz ID-si yaradılır
+      localStorage.removeItem("uce_role");
+    } catch (e) { /* ignore */ }
+    location.reload();
   }
 
   // ---------- Canlı hadisələr ----------
@@ -372,6 +520,7 @@
     else if (name === "sos_assigned" || name === "sos_resolved") {
       if (name === "sos_resolved") toast(t("sos.resolved"));
       loadCitizen();
+    } else if (name === "account_update") { loadAccount(false);
     } else if (name === "reset") { state.banners = []; loadRoads(); loadCitizen(); if (isPriority()) saveRole("priority_citizen", true); else refreshPlan(); }
   }
 
@@ -390,7 +539,24 @@
     $("sosBtn").addEventListener("click", openSheet);
     $("sosCancel").addEventListener("click", closeSheet);
     $("sosSheet").addEventListener("click", (e) => { if (e.target === $("sosSheet")) closeSheet(); });
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("sosSheet").hidden) closeSheet(); });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (!$("sosSheet").hidden) closeSheet();
+      if (!$("disModal").hidden) closeDis();
+    });
+    $("accountCard").addEventListener("click", (e) => {
+      if (e.target.closest("#accLogout")) logout();
+      if (e.target.closest("#accUpload")) openDis(2);
+    });
+    $("disSkip").addEventListener("click", skipDis);
+    $("disConfirm").addEventListener("click", confirmDis);
+    $("disLater").addEventListener("click", closeDis);
+    $("disUpload").addEventListener("click", uploadCertificate);
+    $("disFile").addEventListener("change", () => {
+      const f = $("disFile").files[0];
+      $("disFileName").textContent = f ? f.name + " · " + Math.ceil(f.size / 1024) + " KB" : "PDF · JPG · PNG";
+      $("disMsg").textContent = "";
+    });
     $("sosGrid").addEventListener("click", (e) => { const b = e.target.closest("[data-sos]"); if (b) sendSos(b.dataset.sos); });
     $("safeBtn").addEventListener("click", () => markSafe(null));
     $("roleToggle").addEventListener("change", (e) => saveRole(e.target.checked ? "priority_citizen" : "citizen"));
@@ -405,7 +571,7 @@
       const b = e.target.closest("[data-dismiss]");
       if (b) { state.banners.splice(Number(b.dataset.dismiss), 1); renderBanners(); }
     });
-    window.I18N.onChange(() => { fillDistricts(); renderLegend(); renderConn(); renderAll(false); drawClosures(); drawBarriers(); });
+    window.I18N.onChange(() => { renderAccount(); if (!$("disModal").hidden && state.account) $("disText").textContent = t("dis.text", { group: state.account.mygov_disability_group || "—" }); fillDistricts(); renderLegend(); renderConn(); renderAll(false); drawClosures(); drawBarriers(); });
   }
 
   async function start() {
@@ -415,6 +581,8 @@
     $("icoSafe").innerHTML = ICON.check;
     $("icoWheel").innerHTML = ICON.wheelchair;
     $("icoWheel2").innerHTML = ICON.wheelchair;
+    $("icoWheel3").innerHTML = ICON.wheelchair;
+    handleAuthHash();
     renderConn();
     try {
       state.meta = await api("/meta");
@@ -424,10 +592,13 @@
       return;
     }
     initMap(); fillDistricts(); renderLegend(); bind(); renderPlan(); renderRole();
+    renderAccount();
+    restorePosition();
+    if (state.ctoken) await loadAccount(true);
     // Server bazası sıfırlansa belə rol itməsin: saxlanılmış rol serverə yenidən yazılır
     if (isPriority()) saveRole("priority_citizen", true);
     loadRoads(); loadCitizen();
-    connectStream("/api/v1/stream?citizen_id=" + state.cid, onEvent, (s) => { state.conn = s; renderConn(); if (s === "live" && state.pos) refreshPlan(); });
+    connectStream("/api/v1/stream?citizen_id=" + state.cid + (state.ctoken ? "&token=" + encodeURIComponent(state.ctoken) : ""), onEvent, (s) => { state.conn = s; renderConn(); if (s === "live" && state.pos) refreshPlan(); });
     // SSE kəsilsə belə məlumat köhnəlməsin
     setInterval(() => { if (state.conn !== "live" && state.pos) loadPlan(); }, 8000);
   }

@@ -27,6 +27,7 @@
     <aside class="c-panel" id="panel">
       <div id="banners" aria-live="assertive"></div>
       <div id="statusCard"></div>
+      <section class="card acc-card" id="accountCard"></section>
 
       <section class="card">
         <h2 class="card-title"><span class="ti" id="icoLoc"></span><span data-i18n="loc.title">Yerləşməniz</span></h2>
@@ -62,6 +63,33 @@
       <label class="sr-only" for="sosNote" data-i18n="sos.note"></label>
       <input id="sosNote" class="input" maxlength="280" autocomplete="off" data-i18n-ph="sos.note">
       <button class="btn btn-block" id="sosCancel" type="button" data-i18n="sos.cancel">Bağla</button>
+    </div>
+  </div>
+
+  <div class="sheet-backdrop" id="disModal" hidden>
+    <div class="sheet dis-sheet" role="dialog" aria-modal="true" aria-labelledby="disTitle">
+      <div class="sheet-grip"></div>
+      <div class="dis-ico" id="icoWheel3"></div>
+      <div id="disStep1">
+        <h2 id="disTitle" data-i18n="dis.title">Əlillik statusunun təsdiqi</h2>
+        <p class="sheet-sub" id="disText"></p>
+        <div class="dis-btns">
+          <button class="btn" type="button" id="disSkip" data-i18n="dis.skip">Keç</button>
+          <button class="btn btn-primary dis-confirm" type="button" id="disConfirm" data-i18n="dis.confirm">Təsdiq et</button>
+        </div>
+      </div>
+      <div id="disStep2" hidden>
+        <h2 data-i18n="dis.step2_title">Əlillik arayışını yükləyin</h2>
+        <p class="dis-step" data-i18n="dis.step1"></p>
+        <a class="btn btn-block dis-mygov" id="disMygovLink" href="https://mygov.az" target="_blank" rel="noopener noreferrer"><span data-i18n="dis.open_mygov">myGov-da arayışı aç</span> ↗</a>
+        <p class="dis-step" data-i18n="dis.step2"></p>
+        <label class="dis-drop" for="disFile"><input type="file" id="disFile" accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"><span id="disFileName">PDF · JPG · PNG</span></label>
+        <p class="dis-msg" id="disMsg" role="status"></p>
+        <div class="dis-btns">
+          <button class="btn" type="button" id="disLater" data-i18n="dis.later">Sonra</button>
+          <button class="btn btn-primary" type="button" id="disUpload" data-i18n="dis.upload">Yüklə</button>
+        </div>
+      </div>
     </div>
   </div>
 

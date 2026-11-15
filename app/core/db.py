@@ -52,6 +52,16 @@ CREATE TABLE IF NOT EXISTS shelter_occupancy_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, shelter_id TEXT NOT NULL, ts REAL NOT NULL, occupancy INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_occlog ON shelter_occupancy_log(shelter_id, ts);
+CREATE TABLE IF NOT EXISTS citizen_accounts (
+    citizen_id TEXT PRIMARY KEY, sub_hash TEXT NOT NULL UNIQUE, pin_hash TEXT NOT NULL, provider TEXT NOT NULL,
+    given_name TEXT NOT NULL DEFAULT '', family_name TEXT NOT NULL DEFAULT '', birthdate TEXT NOT NULL DEFAULT '',
+    phone_masked TEXT NOT NULL DEFAULT '', mygov_disability INTEGER NOT NULL DEFAULT 0, mygov_disability_group TEXT,
+    disability_enabled INTEGER NOT NULL DEFAULT 0,
+    disability_status TEXT NOT NULL DEFAULT 'none'
+        CHECK (disability_status IN ('none','declared','mygov_record','pending_review','verified','rejected')),
+    prompt_done INTEGER NOT NULL DEFAULT 0, certificate_file TEXT, certificate_mime TEXT, certificate_uploaded_at REAL,
+    verified_at REAL, verified_by TEXT, created_at REAL NOT NULL, updated_at REAL NOT NULL
+);
 CREATE TABLE IF NOT EXISTS citizen_profiles (
     citizen_id TEXT PRIMARY KEY, role TEXT NOT NULL DEFAULT 'citizen', needs TEXT NOT NULL DEFAULT '[]', updated_at REAL NOT NULL
 );
@@ -71,7 +81,7 @@ MIGRATIONS = [
     ("brigades", "accessible_transport", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
-DATA_TABLES = ["shelter_occupancy_log", "citizen_profiles", "sos_signals", "citizen_status", "evacuation_plans", "alerts", "road_closures", "shelters", "brigades"]
+DATA_TABLES = ["citizen_accounts", "shelter_occupancy_log", "citizen_profiles", "sos_signals", "citizen_status", "evacuation_plans", "alerts", "road_closures", "shelters", "brigades"]
 
 
 class Database:

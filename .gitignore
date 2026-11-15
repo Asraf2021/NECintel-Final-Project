@@ -7,3 +7,5 @@ venv/
 *.db-shm
 .env
 .pytest_cache/
+data/uploads/
+.coverage
