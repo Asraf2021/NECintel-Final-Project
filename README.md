@@ -82,8 +82,9 @@ Docker-siz rejimdə simulyasiya olunmuş xarici API ayrıca proses tələb etmir
 |---|---|---|
 | `dispatcher` | `dispatcher123` | Dispetçer |
 | `admin` | `admin123` | Administrator (bütün icazələr) |
+| `operator` | `operator123` | Operator — yalnız baxış (briqada göndərmək / həyəcan qərarı qadağandır, Drop 3 RBAC nümayişi) |
 
-Bunlar **yalnız nümayiş üçün** hesablardır. Parollar `UCE_DISPATCHER_PASSWORD` və `UCE_ADMIN_PASSWORD` mühit dəyişənləri ilə dəyişdirilir; real istismarda mütləq dəyişdirilməlidir. Vətəndaş tətbiqi giriş tələb etmir.
+Bunlar **yalnız nümayiş üçün** hesablardır. Parollar `UCE_DISPATCHER_PASSWORD`, `UCE_ADMIN_PASSWORD`, `UCE_OPERATOR_PASSWORD` mühit dəyişənləri ilə dəyişdirilir; real istismarda mütləq dəyişdirilməlidir. Vətəndaş tətbiqi qeydiyyatsız işləyir (SOS heç nə ilə gecikdirilmir); şəxsi məlumat və əlillik təsdiqi üçün "myGov ilə daxil ol" (simulyasiya) — test şəxsləri: **Aysel Quliyeva** (II qrup, myGov qeydi), **Elvin Sadıqov** (qeyd yoxdur), **Nərmin Əhmədova** (arayış `ƏL-2026-000777` ilə yoxlama), **Gülnarə Həsənova** (I qrup).
 
 ---
 
