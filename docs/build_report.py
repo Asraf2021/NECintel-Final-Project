@@ -42,7 +42,33 @@ TITLE = {
 # })
 # Siyahı boşdursa, yalnız giriş abzasları göstərilir.
 # ---------------------------------------------------------------------------
-CHALLENGE_DROPS: list[dict] = []
+CHALLENGE_DROPS: list[dict] = [
+    {
+        "title": "Drop 1 (12:00) — Prioritet SOS rolu, əlçatan marşrut və i18n",
+        "paragraphs": [
+            "Tələb: \"Hərəkət Məhdudiyyətli Şəxs / Xüsusi Qayğıya Ehtiyacı Olan Vətəndaş\" rolu; bu rolun SOS-u avtomatik "
+            "\"Kritik Prioritet\" (Priority #1) almalı, ona yalnız əlil arabası / tibbi nəqliyyat üçün əlçatan (panduslu, "
+            "maneəsiz) marşrut təyin olunmalı; bütün interfeys AZ və EN dillərində dinamik dəyişməlidir.",
+            "Rol modeli: app/core/roles.py-da vətəndaş rolları reyestri yaradıldı. Hər rol məlumat kimi təsvir olunur — SOS "
+            "prioriteti, marşrut profili (foot / wheelchair), yalnız əlçatan məntəqə şərti və briqada tələbi "
+            "(accessible_transport). Servislər bu siyasəti oxuyur, ona görə yeni rol əlavə etmək kodu dəyişmir.",
+            "Prioritet: SOS-un prioriteti server tərəfində vətəndaşın saxlanılmış rolundan təyin olunur; müştəri sorğuda "
+            "prioriteti dəyişə bilməz. Prioritet SOS dispetçer panelində həmişə yuxarıda, ayrıca nişan, səs siqnalı və KPI "
+            "kartı ilə göstərilir; zonanın riski \"Kritik\" olur. Briqada təyinində əlçatan nəqliyyatı olan ən yaxın briqada "
+            "(tibbi üstün) seçilir, belə briqada boş deyilsə — istənilən ən yaxın.",
+            "Əlçatan marşrut: yol seqmentlərinə accessible və barrier (pilləkən, yeraltı keçid, dik yoxuş, səki yoxdur), "
+            "məntəqələrə accessible atributu əlavə olundu. wheelchair profili maneəli seqmentləri Dijkstra qrafından bağlı "
+            "yollarla eyni mexanizmlə çıxarır, sürət 3 km/saat qəbul olunur. Profil həm Xarici API-yə, həm lokal ehtiyat "
+            "marşrutlaşdırıcıya ötürülür — kəsinti zamanı da yalnız əlçatan marşrut verilir; avtomatik yenidən "
+            "marşrutlaşdırma da rolu nəzərə alır.",
+            "i18n: interfeys AZ / EN / RU arasında səhifə yenilənmədən dəyişir; məntəqə, briqada və rayon adları da "
+            "tərcümə olunur, sənəd başlığı və ekran oxuyucu etiketləri dildən asılıdır. Lüğətlərin tamlığı avtomatik testlə "
+            "yoxlanılır.",
+            "Yoxlama: 48 yeni avtomatik test (cəmi 293, hamısı uğurlu) — hər rayondan əlçatan marşrut, prioritetin "
+            "dəyişdirilə bilməməsi, briqada seçimi, API kəsintisi, köhnə bazanın miqrasiyası, i18n tamlığı.",
+        ],
+    },
+]
 
 # ---------------------------------------------------------------------------
 # Sənədin məzmunu

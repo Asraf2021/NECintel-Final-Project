@@ -22,7 +22,8 @@ Başqa AI alətindən (Cursor, GitHub Copilot, ChatGPT və s.) **istifadə olunm
 | **Testlər** | Ayrıca AI alt-agenti pytest test dəsti və yük testi skripti yazdı; əsas agent nəticələri yoxladı | Testlərin işə salınmasını və nəticələrini nəzərdən keçirdi |
 | **Yoxlama** | Hər modulu real brauzerdə (Playwright, başsız Chromium) işə salıb ekran görüntüləri ilə yoxladı; tapılan qüsurları düzəltdi | Ekran görüntülərini və canlı demonu yoxladı |
 | **Sənədləşmə** | Ayrıca AI alt-agenti README və Texniki izah sənədini koddan oxuyaraq yazdı; uyğunsuzluqları əsas agentə bildirdi, düzəlişlər edildi | Sənədləri oxudu və təsdiqlədi |
-| **Challenge Drop həlləri** | Hər yeni tələb üçün dəyişiklik planı və kodu hazırladı (bax: README → "Challenge Drop-lara uyğunlaşma") | Elan olunan tələbi AI-yə ötürdü, həlli qəbul etdi |
+| **Challenge Drop həlləri** | Hər yeni tələb üçün dəyişiklik planı və kodu hazırladı (bax: README → "Challenge Drop-lara uyğunlaşma"). Drop 1: rol reyestri, prioritet SOS, əlçatan marşrut, i18n; testləri ayrıca alt-agent yazdı (48 test) | Elan olunan tələbi AI-yə ötürdü, həlli brauzerdə (AZ və EN) yoxladı |
+| **Araşdırma** | Komandanın hazırladığı beynəlxalq araşdırma sənədini təhlil edib ondan "Time-to-Capacity" proqnozu və beynəlxalq istinadlar bölməsini layihəyə köçürdü | Araşdırma sənədini hazırladı və təqdim etdi |
 
 ## 3. Nəzarət prinsipləri
 
