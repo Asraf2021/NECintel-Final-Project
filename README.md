@@ -139,6 +139,23 @@ T90  = (0.9 · C − N) / r          T100 = (C − N) / r
 
 > Bu, sabit axın fərziyyəsinə əsaslanan sadə modeldir; real tətbiqdə statistik / ML modeli (məs. Prophet) və giriş-çıxış sayğacları ilə əvəz oluna bilər.
 
+### myGov ilə qeydiyyat və əlillik statusunun təsdiqi (komanda ideyası)
+
+Drop 1-in məhdudiyyətini — prioritet rolun vətəndaşın özü tərəfindən bildirilməsini — həll edir.
+
+1. Vətəndaş tətbiqində **"myGov ilə daxil ol"** → standart OAuth2 Authorization Code + **PKCE** axını (birdəfəlik `state`, birdəfəlik kod).
+2. myGov məlumatları (ad, soyad, doğum tarixi, maskalanmış telefon, əlillik qeydi və qrupu) sistemə düşür; hesab cihazın anonim ID-si ilə bağlanır (girişdən əvvəl göndərilmiş SOS-lar itmir). Eyni şəxs başqa cihazdan girsə, eyni hesab qaytarılır.
+3. myGov qeydində əlillik varsa, girişdən dərhal sonra **popup**: **"Keç"** və **"Təsdiq et"**.
+4. "Təsdiq et" → **arayış yükləmə**: "myGov-da arayışı aç" düyməsi myGov xidmətinə aparır (ünvan `UCE_MYGOV_CERTIFICATE_URL` ilə təyin olunur), fayl (PDF / JPG / PNG, ≤ 5 MB) yüklənir. myGov qeydi + arayış → status **"Təsdiqlənib (myGov)"**; myGov qeydi olmadan yüklənmiş arayış → dispetçer yoxlaması ("Əlillik təsdiqi" paneli: arayışa bax / təsdiqlə / rədd et).
+5. Əlillik xüsusiyyəti profildən **istənilən vaxt** yandırılıb-söndürülür; rol və aktiv SOS-ların prioriteti dərhal yenilənir.
+6. Dispetçer Priority #1 kartında statusu görür: **"✓ myGov təsdiqi" / "Yoxlanılır" / "Təsdiqlənməyib"**.
+
+**Prinsiplər:** prioritet SOS təsdiqi gözləmir (həyat təhlükəsizliyi); SOS üçün qeydiyyat məcburi deyil (anonim rejim qalır); qeydiyyatlı vətəndaşın adından əməliyyat yalnız onun tokeni ilə mümkündür (`ensure_owner` — SOS, status, profil, plan, SSE); FİN və provayder ID-si yalnız HMAC heşi kimi saxlanılır; arayış faylı açıq qovluqda deyil, MIME + "sehrli bayt" yoxlaması, yalnız `verification:manage` icazəsi ilə baxılır, hər baxış audit jurnalına yazılır.
+
+**Real myGov-a keçid:** prototipdə `mock_mygov/` simulyatoru işləyir (səhifədə "SİMULYASİYA — real myGov deyil"; test şəxsləri uydurmadır, real myGov dizaynı təqlid olunmur). Real inteqrasiya rəsmi qoşulma tələb edir (client qeydiyyatı, müqavilə, açarlar); bundan sonra kod dəyişmədən: `UCE_MYGOV_MODE=oidc`, `UCE_MYGOV_AUTHORIZE_URL`, `UCE_MYGOV_TOKEN_URL`, `UCE_MYGOV_USERINFO_URL`, `UCE_MYGOV_CLIENT_ID`, `UCE_MYGOV_CLIENT_SECRET`.
+
+**Testlər:** `tests/test_mygov.py` — 45 test (tam axın, PKCE / state / kod təkrarı, open redirect, fayl tipi və ölçüsü, saxta fayl, başqasının adından əməliyyat, dispetçer yoxlaması, CHECK constraint, audit).
+
 ## Beynəlxalq təcrübə və istinadlar
 
 Funksiyalar komandanın araşdırma sənədində (`docs/Beynelxalq_Arasdirma.docx`) təhlil olunan beynəlxalq sistemlərə əsaslanır. Layihə onları **vahid qərar axınında** birləşdirir:
@@ -513,7 +530,7 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-**Nəticə (15.11.2026):** `313 passed in 9.53s` — 313 test, hamısı uğurlu.
+**Nəticə (15.11.2026):** `358 passed in 12.93s` — 358 test, hamısı uğurlu.
 
 | Fayl | Test | Nəyi yoxlayır |
 |---|---|---|
@@ -525,6 +542,7 @@ python -m pytest -q
 | `tests/test_resilience.py` | 17 | xarici API kəsintisində ehtiyat marşrut, circuit breaker, bərpa, kəsinti zamanı bağlı yolların nəzərə alınması |
 | `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
 | `tests/test_priority.py` | 48 | Drop 1: prioritet rol, Kritik Prioritet SOS, əlçatan marşrut, briqada seçimi, miqrasiya, i18n tamlığı |
+| `tests/test_mygov.py` | 45 | myGov ilə qeydiyyat: OAuth2 + PKCE axını, popup / təsdiq / arayış yükləmə, fayl yoxlamaları, başqasının adından əməliyyatın qarşısı, dispetçer yoxlaması |
 | `tests/test_replan.py` | 8 | Fon planlayıcısı: dərhal cavab, siqnalların birləşdirilməsi, hesablama zamanı gələn siqnal, xətaya davamlılıq; fallback Dijkstra event loop thread-ində işləmir; məhdud paralellik |
 | `tests/test_forecast.py` | 12 | Time-to-Capacity: sənəddəki nümunə (T90 = 30, T100 = 55 dəq), etibarlılıq, artım olmadıqda vaxt yoxdur, qabaqcadan yönləndirmə |
 
