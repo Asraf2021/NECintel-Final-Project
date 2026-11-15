@@ -493,7 +493,7 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-**Nəticə (15.11.2026):** `245 passed in 5.95s` — 245 test, hamısı uğurlu.
+**Nəticə (15.11.2026):** `305 passed in 8.46s` — 305 test, hamısı uğurlu.
 
 | Fayl | Test | Nəyi yoxlayır |
 |---|---|---|
@@ -504,6 +504,8 @@ python -m pytest -q
 | `tests/test_security.py` | 91 | 15 qorunan endpoint-də 401/403, saxta / vaxtı keçmiş / `alg=none` token, rate limit, başlıqlar, 413 (Content-Length və chunked), SQL injection, parol heşi |
 | `tests/test_resilience.py` | 17 | xarici API kəsintisində ehtiyat marşrut, circuit breaker, bərpa, kəsinti zamanı bağlı yolların nəzərə alınması |
 | `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
+| `tests/test_priority.py` | 48 | Drop 1: prioritet rol, Kritik Prioritet SOS, əlçatan marşrut, briqada seçimi, miqrasiya, i18n tamlığı |
+| `tests/test_forecast.py` | 12 | Time-to-Capacity: sənəddəki nümunə (T90 = 30, T100 = 55 dəq), etibarlılıq, artım olmadıqda vaxt yoxdur, qabaqcadan yönləndirmə |
 
 Testlər sərhəd dəyərlərini dəqiq yoxlayır. Test yazılarkən 5 real qüsur aşkarlandı və düzəldildi: faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi (məs. 95,02% → 95,0 → həyəcan yaranmırdı), bir vətəndaşın məntəqədə iki dəfə sayılması, rayon sərhədindəki 500 m-lik klaster üçün ikinci həyəcan, 413 cavabında təhlükəsizlik başlıqlarının olmaması, chunked gövdədə ölçü həddinin yoxlanmaması.
 

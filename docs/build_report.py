@@ -64,7 +64,7 @@ CHALLENGE_DROPS: list[dict] = [
             "i18n: interfeys AZ / EN / RU arasında səhifə yenilənmədən dəyişir; məntəqə, briqada və rayon adları da "
             "tərcümə olunur, sənəd başlığı və ekran oxuyucu etiketləri dildən asılıdır. Lüğətlərin tamlığı avtomatik testlə "
             "yoxlanılır.",
-            "Yoxlama: 48 yeni avtomatik test (cəmi 293, hamısı uğurlu) — hər rayondan əlçatan marşrut, prioritetin "
+            "Yoxlama: 48 yeni avtomatik test (Drop 1-dən sonra cəmi 293, hamısı uğurlu) — hər rayondan əlçatan marşrut, prioritetin "
             "dəyişdirilə bilməməsi, briqada seçimi, API kəsintisi, köhnə bazanın miqrasiyası, i18n tamlığı.",
         ],
     },
@@ -244,6 +244,32 @@ SECTIONS: list[dict] = [
                 "Eyni alqoritm həm simulyasiya olunmuş xarici API-də, həm də lokal ehtiyat marşrutlaşdırıcıda "
                 "istifadə olunur.",
             ]),
+            ("h2", "5.4. Time-to-Capacity: doluluq proqnozu (əlavə innovasiya)"),
+            ("p", "Komandanın beynəlxalq araşdırma sənədinə (xəstəxana tutumu proqnozları və zamanla dəyişən təxliyə "
+                  "tələbatı üzrə tədqiqatlar) əsaslanaraq sistem hər məntəqənin 90% kritik həddinə və 100% tam tutuma "
+                  "çatmasına qalan vaxtı hesablayır: r = son 10 dəqiqədə xalis artım / dəqiqə; T90 = (0,9·C − N) / r; "
+                  "T100 = (C − N) / r. Sənəddəki nümunə (C = 1000, N = 780, r = 4 nəfər/dəq → T90 = 30 dəq, "
+                  "T100 = 55 dəq) avtomatik testlə yoxlanılır."),
+            ("bullets", [
+                "Proqnoz interval və etibarlılıq səviyyəsi (aşağı / orta / yüksək) ilə göstərilir; r ≤ 0 olduqda vaxt "
+                "göstərilmir.",
+                "Qabaqcadan yönləndirmə: etibarlı proqnoza görə məntəqə vətəndaş çatana qədər 90%-ə çatacaqsa, növbəti "
+                "uyğun məntəqə tövsiyə olunur — insan axını məntəqəni doldurmadan əvvəl.",
+                "Dispetçer cədvəlində proqnoz sütunu və məlumatın son yenilənmə vaxtı; vətəndaş kartında proqnoz.",
+                "Model sabit axın fərziyyəsinə əsaslanır (MVP); gələcəkdə statistik / ML modeli ilə əvəz oluna bilər.",
+            ]),
+            ("h2", "5.5. Beynəlxalq istinadlar"),
+            ("table",
+             ["Nümunə", "Layihədə istifadə olunan ideya"],
+             [
+                 ["SOBO-WEB (Yaponiya)", "Vətəndaş və dispetçer üçün vahid məlumat bazası və canlı hadisə axını."],
+                 ["FEMA ESF#6 (ABŞ)", "Məntəqə statusu, tutum, doluluq və əlil arabası üçün əlçatanlıq atributu."],
+                 ["Waze for Cities", "Yol bağlanması feed-i və marşrutun avtomatik yenidən hesablanması."],
+                 ["RapidSOS (ABŞ)", "Dispetçerə prioritet və briqada ilə kontekstli vahid SOS kartı."],
+                 ["Readiness TW (Tayvan)", "GPS → yaxın məntəqə → təhlükəsiz marşrut → xəbərdarlıq axını."],
+                 ["Xəstəxana tutumu proqnozları", "Time-to-Capacity proqnozu."],
+             ],
+             [4.6, 11.9]),
         ],
     },
     {
@@ -314,7 +340,7 @@ SECTIONS: list[dict] = [
                   "yolu verməyə və fon tapşırığını söndürməyə imkan verir, xarici API simulyatoru isə proses daxilində "
                   "işləyir — ona görə testlər şəbəkə və əlavə servis tələb etmir. İşə salma: python -m pytest -q. "
                   "Nəticələr README-də göstərilib."),
-            ("p", "Nəticə: 245 avtomatik test, hamısı uğurlu (≈6 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
+            ("p", "Nəticə: 305 avtomatik test, hamısı uğurlu (≈8 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
                   "yoxlayır: 3 və 4 fərqli SOS, eyni vətəndaşdan təkrar siqnal, 5 dəqiqəlik pəncərə, 500 m radius, "
                   "doluluğun dəqiq 95% və 95%-dən yuxarı olması, 90% marşrut həddi. Test yazılarkən 5 real qüsur "
                   "aşkarlandı və düzəldildi (faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi, vətəndaşın "
