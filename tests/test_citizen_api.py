@@ -93,7 +93,7 @@ def test_evacuation_by_district(client):
     assert rec["shelter_id"] in {s["id"] for s in plan["shelters"]}
     assert rec["route"]["found"] is True
     assert rec["route"]["duration_min"] > 0 and len(rec["route"]["points"]) >= 2
-    assert plan["routing"] == {"source": "external", "degraded": False}
+    assert {k: plan["routing"][k] for k in ("source", "degraded")} == {"source": "external", "degraded": False}
     assert plan["rerouted"] is False
 
 

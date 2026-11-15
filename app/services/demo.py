@@ -70,7 +70,8 @@ def default_users() -> list[dict]:
     ]
 
 
-async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: str | None, edge_id: str | None) -> dict:
+async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: str | None, edge_id: str | None,
+              mode: str | None = None) -> dict:
     if name == "sos_cluster":
         d = ctx.district(district_id) if district_id else None
         d = d or random.choice(ctx.districts)
@@ -173,18 +174,18 @@ async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: s
         return {"scenario": name}
 
     if name == "api_outage":
-        await ctx.routing.sim("outage", {"mode": "error"})
-        # Kəsintini dərhal aşkarla (növbəti fon sinxronunu gözləmədən): circuit breaker açılır
-        for _ in range(ctx.routing.breaker.fail_threshold):
-            if not ctx.routing.breaker.allow():
-                break
-            await ctx.routing.sync_traffic()
+        outage_mode = mode or "error"  # error -> HTTP 503; timeout -> cavab 5 s-dən çox gecikir
+        await ctx.routing.sim("outage", {"mode": outage_mode})
+        # Kəsintini dərhal aşkarla (növbəti fon sinxronunu gözləmədən): breaker həddi qədər paralel yoxlama —
+        # timeout rejimində də ümumi gözləmə bir timeout qədərdir (≤ 2.5 s), 3 × 2.5 s deyil
+        await asyncio.gather(*(ctx.routing.sync_traffic() for _ in range(ctx.routing.breaker.fail_threshold)))
         ctx.bus.publish("routing_status", ctx.routing.status(), channel="public")
-        return {"scenario": name, "mode": "error", "routing": ctx.routing.status()}
+        return {"scenario": name, "mode": outage_mode, "routing": ctx.routing.status()}
 
     if name == "api_restore":
         await ctx.routing.sim("outage", {"mode": "off"})
         ctx.routing.breaker.success()
+        ctx.routing._bump()
         await _sync_now(ctx)
         ctx.bus.publish("routing_status", ctx.routing.status(), channel="public")
         return {"scenario": name, "mode": "off", "routing": ctx.routing.status()}

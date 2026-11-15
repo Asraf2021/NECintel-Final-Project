@@ -67,7 +67,7 @@ def create_external_app() -> FastAPI:
             if mode == "error":
                 return JSONResponse({"detail": "service unavailable (simulated outage)"}, status_code=503)
             if mode == "timeout":
-                await asyncio.sleep(30)
+                await asyncio.sleep(8)  # Drop 2: cavab müddəti 5 saniyəni keçir
             elif mode == "slow":
                 await asyncio.sleep(0.8)
         return await call_next(request)
@@ -81,6 +81,10 @@ def create_external_app() -> FastAPI:
     @app.get("/v1/health")
     async def health():
         return {"status": "ok", "version": state["version"]}
+
+    @app.get("/v1/sim/status")
+    async def sim_status():
+        return {"outage": state["outage"], "closures": len(state["closures"])}
 
     @app.get("/v1/network")
     async def network():

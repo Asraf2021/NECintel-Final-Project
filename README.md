@@ -459,7 +459,26 @@ JWT (HS256) və müddətli tokenlər, PBKDF2-HMAC-SHA256 parol heşi, icazə əs
 
 ### Drop 2 (13:00)
 
-<!-- DROP_2 -->
+**Tələb:** Vətəndaş modulunun istifadə etdiyi Xarici Xəritə və Marşrutlaşdırma API-si sıradan çıxır (HTTP 503 və ya cavab > 5 s). Sistem çökməməli, Circuit Breaker / Fallback avtomatik işə düşməli, məsafə/marşrut lokal ehtiyat məlumat bazasından (statik koordinat matrisi və ya son keşlənmiş marşrutlar) hesablanmalı, istifadəçiyə "Oflayn / Ehtiyat marşrut rejimində işləyir" bildirişi göstərilməlidir.
+
+**Necə uyğunlaşdıq.** Əsas mexanizm (adapter + retry + circuit breaker + lokal Dijkstra) arxitekturada əvvəldən vardı (`app/services/routing.py`); drop üçün gücləndirildi:
+
+| Tələb | Reallaşdırma |
+|---|---|
+| HTTP 503 | 5xx cavab xəta sayılır, `last_error = "HTTP 503"`, ehtiyat rejim |
+| Cavab > 5 s | Sərt timeout 2,5 s (`UCE_EXTERNAL_TIMEOUT_S`) — istifadəçi heç vaxt 5 s gözləmir; timeout-da **təkrar cəhd edilmir** |
+| Circuit Breaker | 3 ardıcıl xətadan sonra açılır → sonrakı sorğular xarici API-ni gözləmir (ms-lərlə cavab); 15 s sonra yarımaçıq rejimdə bir sınaq; bərpada avtomatik bağlanır |
+| Lokal ehtiyat baza — 3 səviyyə | 1) **lokal yol şəbəkəsi** + son məlum bağlı yollar üzərində Dijkstra; 2) **son keşlənmiş marşrutlar** (kəsintidən əvvəlki xarici cavablar, TTL-siz); 3) **statik koordinat matrisi** (düz xətt × yol əmsalı) — qraf da əlçatmaz olsa təxmini məsafə/müddət. Plan cavabında `routing.tier` |
+| Çökməmə | Ehtiyat zənciri heç vaxt istisna atmır; bütün endpoint-lər kəsinti zamanı < 500 (test: hər iki rejimdə 9 endpoint) |
+| Bildiriş | Vətəndaş: sarı zolaq **"Oflayn / Ehtiyat marşrut rejimində işləyir"** + mənbə (lokal şəbəkə / keş / matris); dispetçer: yanıb-sönən çip + başlama vaxtı + səbəb (HTTP 503 / Timeout); AZ / RU / EN |
+| Bərpa | Birinci uğurlu cavabda keş təmizlənir (ehtiyat nəticələr keşlənmir) → dərhal onlayn rejim, zolaq yox olur |
+| Prioritet vətəndaş | Kəsinti zamanı da yalnız əlçatan marşrut (Drop 1 ilə birlikdə işləyir) |
+
+**Demo (komanda ideyası ilə):** dispetçer panelinin yuxarısında **"Xarici API kəsintisi" ON/OFF açarı** və rejim seçimi (**HTTP 503** / **Timeout > 5 s**). Açar sistemimizdə heç nəyi "saxtalaşdırmır": simulyasiya olunmuş xarici API serveri həqiqətən 503 qaytarmağa və ya 8 s gecikməyə başlayır, bizim dayanıqlılıq kodu bunu adi xəta kimi aşkarlayır. OFF → server normal cavab verir, sistem özü onlayn rejimə qayıdır.
+
+**Daha inandırıcı variant — real proses kəsintisi:** `run_with_external_api.bat` xarici API-ni **ayrıca pəncərədə** işə salır. Münsiflərin qarşısında həmin pəncərəni bağlayın — real `ConnectError`, sistem ehtiyat rejimə keçir; yenidən açın — 15 s ərzində özü bərpa olunur. (Yoxlanılıb: proses öldürüldükdən sonra bütün sorğular 200, 0 traceback.)
+
+**Testlər:** `tests/test_drop2_outage.py` — 11 test: timeout ilə < 5 s-də ehtiyat, timeout-da retry yoxdur, 503 səbəbi, breaker açılandan sonra xarici çağırış yoxdur, iki rejimdə heç bir endpoint 500 vermir, keşlənmiş marşrut və statik matris səviyyələri, bərpa, prioritet vətəndaşın əlçatan marşrutu. Cəmi: **381 test, hamısı uğurlu**.
 
 ### Drop 3 (14:00)
 
@@ -533,7 +552,7 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-**Nəticə (15.11.2026):** `370 passed in 12.10s` — 370 test, hamısı uğurlu.
+**Nəticə (15.11.2026):** `381 passed in 22.21s` — 381 test, hamısı uğurlu.
 
 | Fayl | Test | Nəyi yoxlayır |
 |---|---|---|
@@ -546,6 +565,7 @@ python -m pytest -q
 | `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
 | `tests/test_priority.py` | 48 | Drop 1: prioritet rol, Kritik Prioritet SOS, əlçatan marşrut, briqada seçimi, miqrasiya, i18n tamlığı |
 | `tests/test_mygov.py` | 57 | myGov ilə qeydiyyat: OAuth2 + PKCE axını, popup / təsdiq, arayış nömrəsinin myGov reyestrində yoxlanması (başqasının / uydurma / müddəti bitmiş), fayl yükləmə, fayl yoxlamaları, başqasının adından əməliyyatın qarşısı, dispetçer yoxlaması |
+| `tests/test_drop2_outage.py` | 11 | Drop 2: 503 və > 5 s timeout, breaker, 3 ehtiyat səviyyəsi, 500 yoxdur, bərpa |
 | `tests/test_replan.py` | 8 | Fon planlayıcısı: dərhal cavab, siqnalların birləşdirilməsi, hesablama zamanı gələn siqnal, xətaya davamlılıq; fallback Dijkstra event loop thread-ində işləmir; məhdud paralellik |
 | `tests/test_forecast.py` | 12 | Time-to-Capacity: sənəddəki nümunə (T90 = 30, T100 = 55 dəq), etibarlılıq, artım olmadıqda vaxt yoxdur, qabaqcadan yönləndirmə |
 

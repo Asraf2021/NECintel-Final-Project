@@ -68,6 +68,23 @@ CHALLENGE_DROPS: list[dict] = [
             "dəyişdirilə bilməməsi, briqada seçimi, API kəsintisi, köhnə bazanın miqrasiyası, i18n tamlığı.",
         ],
     },
+    {
+        "title": "Drop 2 (13:00) — Xarici Xəritə API-sinin sıradan çıxması (503 / > 5 s)",
+        "paragraphs": [
+            "Tələb: xarici API HTTP 503 qaytarır və ya 5 saniyədən çox cavab vermir; sistem çökməməli, Circuit Breaker / "
+            "Fallback avtomatik işə düşməli, marşrut lokal ehtiyat bazadan hesablanmalı və istifadəçiyə \"Oflayn / Ehtiyat "
+            "marşrut rejimində işləyir\" bildirişi göstərilməlidir.",
+            "Həll: adapter + circuit breaker arxitekturası əvvəldən vardı. Timeout 2,5 s-ə endirildi və timeout-da təkrar cəhd "
+            "edilmir — istifadəçi heç vaxt 5 s gözləmir; 3 ardıcıl xətadan sonra breaker açılır və sorğular xarici API-ni "
+            "gözləmədən cavablanır.",
+            "Üç səviyyəli ehtiyat: lokal yol şəbəkəsi üzərində Dijkstra (son məlum bağlı yollarla), son keşlənmiş marşrutlar, "
+            "statik koordinat matrisi (düz xətt məsafəsi × yol əmsalı). Ehtiyat zənciri istisna atmır; kəsinti zamanı heç bir "
+            "endpoint 500 qaytarmır. Bərpada keş təmizlənir və sistem dərhal onlayn rejimə qayıdır.",
+            "Demo: dispetçer panelində ON/OFF açarı (HTTP 503 və ya timeout > 5 s rejimi) simulyasiya olunmuş xarici API "
+            "serverini həqiqətən sıradan çıxarır; əlavə olaraq xarici API ayrıca prosesdə işə salınıb bağlana bilər (real "
+            "kəsinti). 11 yeni avtomatik test, cəmi 381 test uğurlu.",
+        ],
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -348,7 +365,7 @@ SECTIONS: list[dict] = [
                   "yolu verməyə və fon tapşırığını söndürməyə imkan verir, xarici API simulyatoru isə proses daxilində "
                   "işləyir — ona görə testlər şəbəkə və əlavə servis tələb etmir. İşə salma: python -m pytest -q. "
                   "Nəticələr README-də göstərilib."),
-            ("p", "Nəticə: 370 avtomatik test, hamısı uğurlu (≈12 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
+            ("p", "Nəticə: 381 avtomatik test, hamısı uğurlu (≈22 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
                   "yoxlayır: 3 və 4 fərqli SOS, eyni vətəndaşdan təkrar siqnal, 5 dəqiqəlik pəncərə, 500 m radius, "
                   "doluluğun dəqiq 95% və 95%-dən yuxarı olması, 90% marşrut həddi. Test yazılarkən 5 real qüsur "
                   "aşkarlandı və düzəldildi (faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi, vətəndaşın "

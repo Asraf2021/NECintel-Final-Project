@@ -110,11 +110,20 @@
   function createMap(elId, center, zoom, dark) {
     const map = L.map(elId, { zoomControl: false, attributionControl: true }).setView(center, zoom);
     L.control.zoom({ position: "topright" }).addTo(map);
-    const style = dark ? "dark_all" : "light_all";
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/" + style + "/{z}/{x}/{y}{r}.png", {
-      maxZoom: 18, subdomains: "abcd",
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-    }).addTo(map);
+    // Əsas plitə mənbəyi: OpenStreetMap (açar tələb etmir). Çox xəta olarsa — ehtiyat mənbəyə keçid.
+    const sources = [
+      { url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png", opts: { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
+      { url: "https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png", opts: { maxZoom: 19, subdomains: "abc", attribution: '&copy; OpenStreetMap, HOT' } },
+    ];
+    let idx = 0, errors = 0, layer = null;
+    function mount() {
+      if (layer) map.removeLayer(layer);
+      const src = sources[idx];
+      layer = L.tileLayer(src.url, Object.assign({ className: dark ? "tiles-dark" : "" }, src.opts)).addTo(map);
+      layer.on("tileerror", () => { errors += 1; if (errors >= 6 && idx < sources.length - 1) { idx += 1; errors = 0; mount(); } });
+      layer.on("tileload", () => { errors = 0; });
+    }
+    mount();
     return map;
   }
 

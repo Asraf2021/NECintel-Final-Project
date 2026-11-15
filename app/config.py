@@ -58,7 +58,8 @@ class Settings:
     # Boşdursa: simulyasiya olunmuş API eyni prosesdə (in-process ASGI) çağırılır.
     # Docker-də: http://external-api:8001 (ayrı konteyner).
     external_api_url = _env("UCE_EXTERNAL_API_URL", "")
-    external_timeout_s = float(_env("UCE_EXTERNAL_TIMEOUT_S", "1.5"))
+    external_timeout_s = float(_env("UCE_EXTERNAL_TIMEOUT_S", "2.5"))  # Drop 2: 5 s həddi aşılmadan ehtiyata keç
+    external_max_wait_s = float(_env("UCE_EXTERNAL_MAX_WAIT_S", "5"))   # retry daxil ümumi gözləmə tavanı
     external_retries = int(_env("UCE_EXTERNAL_RETRIES", "1"))
     breaker_fail_threshold = int(_env("UCE_BREAKER_FAILS", "3"))
     breaker_reset_s = float(_env("UCE_BREAKER_RESET_S", "15"))

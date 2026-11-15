@@ -158,7 +158,7 @@ def audit(limit: int = Query(default=50, ge=1, le=500), user: dict = Depends(req
 async def scenario(body: ScenarioRequest, user: dict = Depends(require("demo:run")), ctx: AppContext = Depends(get_ctx)):
     if not settings.demo_mode:
         raise HTTPException(403, "demo_mode_disabled")
-    result = await demo.run(ctx, body.name, body.district_id, body.shelter_id, body.edge_id)
+    result = await demo.run(ctx, body.name, body.district_id, body.shelter_id, body.edge_id, body.mode)
     ctx.db.audit(user["sub"], user["role"], "demo_scenario", {"name": body.name})
     analytics.invalidate()
     if body.name in ("reset", "road_open_all"):

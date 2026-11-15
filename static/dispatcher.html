@@ -16,6 +16,12 @@
       <span class="chip d-chip" id="routingChip"></span>
       <span class="chip d-chip"><span class="dot" id="connDot"></span><span id="connText"></span></span>
       <span class="d-clock num" id="clock"></span>
+      <div class="outage" id="outageBox" hidden>
+        <span class="outage-label" data-i18n="d.outage.label" data-i18n-title="d.outage.hint">Xarici API kəsintisi</span>
+        <select class="outage-mode" id="outageMode" aria-label="mode"><option value="error">HTTP 503</option><option value="timeout">Timeout &gt; 5 s</option></select>
+        <button class="outage-switch" id="outageSwitch" type="button" role="switch" aria-checked="false"><span class="knob"></span></button>
+        <span class="outage-state" id="outageState"></span>
+      </div>
       <div class="menu" id="simMenu" hidden>
         <button class="btn btn-sm d-btn" id="simBtn" type="button" aria-haspopup="true" aria-expanded="false"><span id="icoPlay"></span><span data-i18n="d.sim.title">Simulyasiya</span></button>
         <div class="menu-list" id="simList" hidden></div>

@@ -174,8 +174,9 @@
   function renderBanners() {
     const parts = [];
     if (state.degraded) {
-      parts.push('<div class="banner banner-degraded"><span class="b-ico">' + ICON.signal + "</span><div><b>" + esc(t("degraded.title")) +
-        "</b><p>" + esc(t("degraded.text")) + "</p></div><span></span></div>");
+      const tier = state.plan && state.plan.routing && state.plan.routing.tier;
+      parts.push('<div class="banner banner-degraded" role="status"><span class="b-ico">' + ICON.signal + "</span><div><b>" + esc(t("degraded.title")) +
+        "</b><p>" + esc(t("degraded.text")) + "</p>" + (tier ? '<p class="b-tier">' + esc(t("degraded.tier." + tier)) + "</p>" : "") + "</div><span></span></div>");
     }
     state.banners.forEach((b, i) => {
       parts.push('<div class="banner banner-' + (b.kind === "reroute" ? "reroute" : "info") + '"><span class="b-ico">' + (b.kind === "reroute" ? ICON.route : ICON.shelter) +
@@ -298,13 +299,39 @@
   }
   function closeSheet() { $("sosSheet").hidden = true; $("sosBtn").focus(); }
 
+  const COOLDOWN_S = 30;   // serverdəki təkrar siqnal yoxlaması ilə eyni pəncərə
+  const cooldowns = { sos: 0, safe: 0 };
+  let cooldownTimer = null;
+
+  function startCooldown(kind) {
+    cooldowns[kind] = Date.now() + COOLDOWN_S * 1000;
+    renderCooldowns();
+    if (!cooldownTimer) cooldownTimer = setInterval(renderCooldowns, 500);
+  }
+
+  function renderCooldowns() {
+    const now = Date.now();
+    const sosLeft = Math.ceil((cooldowns.sos - now) / 1000);
+    const safeLeft = Math.ceil((cooldowns.safe - now) / 1000);
+    $("sosBtn").disabled = sosLeft > 0;
+    $("sosBtn").classList.toggle("is-cooldown", sosLeft > 0);
+    $("sosBtn").querySelector(".act-label").textContent = sosLeft > 0 ? sosLeft + "s" : t("sos.button");
+    $("safeBtn").disabled = safeLeft > 0;
+    const arrive = $("arriveBtn");
+    if (arrive) arrive.disabled = safeLeft > 0;
+    $("safeBtn").querySelector("span:last-child").textContent = safeLeft > 0 ? t("safe.button") + " · " + safeLeft + "s" : t("safe.button");
+    if (sosLeft <= 0 && safeLeft <= 0 && cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
+  }
+
   async function sendSos(type) {
     const note = $("sosNote").value.trim();
     closeSheet();
+    if (cooldowns.sos > Date.now()) { toast(t("sos.cooldown", { s: Math.ceil((cooldowns.sos - Date.now()) / 1000) }), "error"); return; }
     try {
-      await api("/sos", { method: "POST", body: { citizen_id: state.cid, type, lat: state.pos.lat, lon: state.pos.lon, note } });
+      const res = await api("/sos", { method: "POST", body: { citizen_id: state.cid, type, lat: state.pos.lat, lon: state.pos.lon, note } });
       $("sosNote").value = "";
-      toast(t("sos.sent"), "success");
+      startCooldown("sos");
+      toast(t(res.duplicate ? "sos.duplicate" : "sos.sent"), res.duplicate ? undefined : "success");
       if (navigator.vibrate) navigator.vibrate(200);
       await loadCitizen();
     } catch (e) {
@@ -313,12 +340,14 @@
   }
 
   async function markSafe(shelterId) {
+    if (cooldowns.safe > Date.now()) { toast(t("safe.cooldown", { s: Math.ceil((cooldowns.safe - Date.now()) / 1000) }), "error"); return; }
     try {
       const body = { citizen_id: state.cid, status: "safe" };
       if (shelterId) body.shelter_id = shelterId;
       if (state.pos) { body.lat = state.pos.lat; body.lon = state.pos.lon; }
       const res = await api("/status", { method: "POST", body });
       state.safeShelterName = res.shelter ? nm(res.shelter) : null;
+      startCooldown("safe");
       toast(t("safe.done"), "success");
       await loadCitizen();
       $("panel").scrollTo({ top: 0, behavior: "smooth" });

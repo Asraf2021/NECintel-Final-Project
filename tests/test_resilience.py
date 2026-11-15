@@ -35,12 +35,12 @@ def _scenario(client, headers, name: str):
 # Kəsinti zamanı graceful degradation
 # ---------------------------------------------------------------------------
 def test_outage_falls_back_to_local_routing(client, ctx, auth_headers, sim):
-    assert _plan(client)["routing"] == {"source": "external", "degraded": False}
+    assert {k: _plan(client)["routing"][k] for k in ("source", "degraded")} == {"source": "external", "degraded": False}
     _scenario(client, auth_headers, "api_outage")
     assert sim["outage"] == "error"
 
     plan = _plan(client)
-    assert plan["routing"] == {"source": "fallback", "degraded": True}
+    assert {k: plan["routing"][k] for k in ("source", "degraded")} == {"source": "fallback", "degraded": True}
     assert plan["recommended"]["route"]["found"] is True
     assert plan["recommended"]["route"]["duration_min"] > 0
     assert len(plan["shelters"]) >= 1 and all("occupancy_pct" in s for s in plan["shelters"])
@@ -55,7 +55,9 @@ def test_fallback_route_equals_external_route(client, sim):
     fb = client.get(EVAC, params={"lat": lat, "lon": lon}).json()
     assert fb["routing"]["source"] == "fallback"
     assert fb["recommended"]["shelter_id"] == plan["recommended"]["shelter_id"]
-    assert fb["recommended"]["route"] == plan["recommended"]["route"]
+    route = dict(fb["recommended"]["route"])
+    assert route.pop("tier") == "local_graph"   # ehtiyat səviyyəsi 1: lokal qraf
+    assert route == plan["recommended"]["route"]
 
 
 def test_breaker_opens_after_threshold_failures(client, ctx, sim, monkeypatch):
@@ -113,7 +115,7 @@ def test_recovery_after_restore_and_reset(client, ctx, sim):
     assert ctx.routing.status()["breaker"] == "half_open"
 
     plan = _plan(client, 0)
-    assert plan["routing"] == {"source": "external", "degraded": False}
+    assert {k: plan["routing"][k] for k in ("source", "degraded")} == {"source": "external", "degraded": False}
     st = ctx.routing.status()
     assert st["breaker"] == "closed" and st["provider"] == "external" and st["degraded"] is False
     assert ctx.routing.breaker.failures == 0
@@ -132,7 +134,7 @@ def test_demo_outage_and_restore_scenarios(client, ctx, auth_headers, sim):
     assert sim["outage"] == "off"
     ctx.routing.breaker.reset_s = 0                                # ssenari breaker-i sıfırlamırsa belə keçid açılır
     plan = _plan(client, 0)
-    assert plan["routing"] == {"source": "external", "degraded": False}
+    assert {k: plan["routing"][k] for k in ("source", "degraded")} == {"source": "external", "degraded": False}
     assert ctx.routing.status()["breaker"] == "closed" and ctx.routing.status()["provider"] == "external"
 
 

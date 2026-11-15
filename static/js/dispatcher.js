@@ -403,7 +403,34 @@
     const r = state.data.routing;
     const chip = $("routingChip");
     chip.className = "chip d-chip " + (r.degraded ? "is-bad" : "is-ok");
-    chip.innerHTML = ICON.signal + "<span>" + esc(t(r.degraded ? "d.routing.fallback" : "d.routing.external")) + "</span>";
+    const extra = r.degraded ? [r.degraded_since ? t("d.routing.since", { ago: timeAgo(r.degraded_since) }) : "", r.last_error ? t("d.routing.err", { err: r.last_error }) : ""].filter(Boolean).join(" · ") : "";
+    chip.innerHTML = ICON.signal + "<span>" + esc(t(r.degraded ? "d.routing.fallback" : "d.routing.external")) + (extra ? ' <small class="chip-sub">' + esc(extra) + "</small>" : "") + "</span>";
+    chip.title = r.degraded ? JSON.stringify(r.tier_calls || {}) : "";
+    renderOutageSwitch();
+  }
+
+  // Drop 2 demo açarı: xarici API-ni həqiqətən 503 / timeout rejiminə salır (sadəcə görüntü deyil)
+  state.outageOn = false;
+  function renderOutageSwitch() {
+    const box = $("outageBox");
+    box.hidden = !can("demo:run");
+    if (box.hidden) return;
+    const r = state.data && state.data.routing;
+    // Həqiqi vəziyyət serverdən: breaker açıqdırsa və biz açarı yandırmışıqsa — ON
+    const on = state.outageOn && !!(r && r.degraded);
+    box.classList.toggle("is-on", state.outageOn);
+    $("outageSwitch").setAttribute("aria-checked", String(state.outageOn));
+    $("outageState").textContent = state.outageOn ? t("d.outage.on") + (on ? "" : " …") : t("d.outage.off");
+    $("outageMode").disabled = state.outageOn;
+  }
+  async function toggleOutage() {
+    const turnOn = !state.outageOn;
+    state.outageOn = turnOn;
+    renderOutageSwitch();
+    const body = turnOn ? { name: "api_outage", mode: $("outageMode").value } : { name: "api_restore" };
+    const res = await action(() => call("/dispatch/demo/scenario", { method: "POST", body }),
+      turnOn ? t("d.sim.api_outage" + ($("outageMode").value === "timeout" ? "_timeout" : "")) + " — " + t("d.toast.done") : t("d.sim.api_restore") + " — " + t("d.toast.done"));
+    if (!res) { state.outageOn = !turnOn; renderOutageSwitch(); }
   }
 
   function renderConn() {
@@ -412,7 +439,7 @@
   }
 
   function renderSimMenu() {
-    const items = ["sos_cluster", "priority_sos", "shelter_fill", "crowd", "inflow_start", "inflow_stop", "-", "road_close", "road_open_all", "-", "api_outage", "api_restore", "-", "reset"];
+    const items = ["sos_cluster", "priority_sos", "shelter_fill", "crowd", "inflow_start", "inflow_stop", "-", "road_close", "road_open_all", "-", "api_outage", "api_outage_timeout", "api_restore", "-", "reset"];
     $("simList").innerHTML = items.map((n) => n === "-" ? "<hr>" : '<button type="button" data-sim="' + n + '">' + esc(t("d.sim." + n)) + "</button>").join("");
   }
 
@@ -430,6 +457,7 @@
   function bind() {
     $("loginForm").addEventListener("submit", doLogin);
     $("logoutBtn").addEventListener("click", logout);
+    $("outageSwitch").addEventListener("click", toggleOutage);
     $("sosFilter").addEventListener("click", (e) => {
       const b = e.target.closest("[data-filter]");
       if (!b) return;
@@ -477,8 +505,11 @@
       } else if (ds.openRoad) action(() => call("/dispatch/roads/" + ds.openRoad + "/open", { method: "POST" }), t("d.toast.done"));
       else if (ds.sim) {
         $("simList").hidden = true;
-        if (ds.sim === "reset") state.roadsDrawn = false;
-        action(() => call("/dispatch/demo/scenario", { method: "POST", body: { name: ds.sim } }), t("d.sim." + ds.sim) + " — " + t("d.toast.done"));
+        if (ds.sim === "reset") { state.roadsDrawn = false; state.outageOn = false; }
+        if (ds.sim === "api_outage" || ds.sim === "api_outage_timeout") state.outageOn = true;
+        if (ds.sim === "api_restore") state.outageOn = false;
+        const body = ds.sim === "api_outage_timeout" ? { name: "api_outage", mode: "timeout" } : { name: ds.sim, mode: ds.sim === "api_outage" ? "error" : undefined };
+        action(() => call("/dispatch/demo/scenario", { method: "POST", body }), t("d.sim." + ds.sim) + " — " + t("d.toast.done"));
       }
     });
 
