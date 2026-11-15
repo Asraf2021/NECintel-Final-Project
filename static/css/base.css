@@ -145,3 +145,98 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .home-status { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; color: #B9C7D6; font-size: 14px; }
 .home-status .chip { background: rgba(255, 255, 255, .1); color: #fff; }
 .home-foot { padding: 18px 28px; color: #8FA3B8; font-size: 13px; }
+
+/* ===================== Tema: açıq / tünd ===================== */
+.theme-btn {
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, .18); background: rgba(255, 255, 255, .1);
+  color: #fff; display: inline-grid; place-items: center; font-size: 18px; flex: none;
+}
+.theme-btn:hover { background: rgba(255, 255, 255, .2); }
+/* Xəritə plitələri tünd temada tündləşdirilir (OSM/Esri-nin tünd stili açar tələb edir) */
+html[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.88) saturate(.55); }
+html[data-theme="dark"] .leaflet-container { background: #16202D; }
+
+/* ---- Vətəndaş tətbiqi: tünd tema ---- */
+html[data-theme="dark"] {
+  --ink: #E8EEF5; --ink-2: #A9B7C6; --ink-3: #7F8FA3; --line: #24364D; --bg: #0A121C; --card: #121D2B;
+  --red-soft: #3A1418; --green-soft: #0F3D2E; --amber-soft: #3A2A0A; --blue-soft: #132F63;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .35);
+  color-scheme: dark;
+}
+html[data-theme="dark"] .citizen .c-top { background: #0D1826; border-bottom: 1px solid #24364D; }
+html[data-theme="dark"] .c-map { background: #16202D; }
+html[data-theme="dark"] .c-legend { background: rgba(18, 29, 43, .94); }
+html[data-theme="dark"] .select, html[data-theme="dark"] .input { background: var(--bg); color: var(--ink); }
+html[data-theme="dark"] .item.is-full { background: #22161A; }
+html[data-theme="dark"] .role-toggle { background: var(--bg); }
+html[data-theme="dark"] .is-priority .role-toggle { background: #241A3D; }
+html[data-theme="dark"] .sheet { background: var(--card); color: var(--ink); }
+html[data-theme="dark"] .c-actions { background: linear-gradient(to top, rgba(10, 18, 28, 1) 62%, rgba(10, 18, 28, 0)); }
+html[data-theme="dark"] .banner-reroute, html[data-theme="dark"] .banner-degraded { background: #3A2A0A; border-color: #8A5A0A; color: #FFD08A; }
+html[data-theme="dark"] .banner-info { background: #132F63; border-color: #2F4F8F; color: #9EC0FF; }
+html[data-theme="dark"] .note { color: #FFD08A; }
+html[data-theme="dark"] .note.note-acc, html[data-theme="dark"] .acc-badge, html[data-theme="dark"] .sheet-priority { background: #241A3D; color: #C9B3FF; border-color: #5B3FA8; }
+html[data-theme="dark"] .note.note-fc { background: #3A1418; color: #FF9AA5; }
+html[data-theme="dark"] .sos-type { color: #FF9AA5; }
+html[data-theme="dark"] .sos-type:active { color: #fff; }
+html[data-theme="dark"] .ver-chip.is-verified { color: #6EE7B7; }
+html[data-theme="dark"] .ver-chip.is-pending { color: #FFD08A; }
+html[data-theme="dark"] .ver-chip.is-rejected { color: #FF9AA5; }
+html[data-theme="dark"] .dis-mygov { color: #8DBBF5; border-color: #3B6EA8; }
+html[data-theme="dark"] .dis-msg.is-ok { color: #6EE7B7; }
+html[data-theme="dark"] .dis-msg.is-err { color: #FF9AA5; }
+html[data-theme="dark"] .skeleton { background: linear-gradient(90deg, #18263A 25%, #1F3048 50%, #18263A 75%); background-size: 200% 100%; }
+html[data-theme="dark"] .citizen .leaflet-popup-content-wrapper, html[data-theme="dark"] .citizen .leaflet-popup-tip,
+html[data-theme="dark"] .citizen .leaflet-tooltip, html[data-theme="dark"] .citizen .leaflet-bar a,
+html[data-theme="dark"] .citizen .leaflet-control-layers { background: #18263A; color: #E8EEF5; border-color: #24364D; }
+html[data-theme="dark"] .citizen .leaflet-control-attribution { background: rgba(13, 24, 38, .8); color: #8EA0B5; }
+
+/* ---- Dispetçer paneli: açıq tema ---- */
+html[data-theme="light"] .disp {
+  --d-bg: #F3F5F8; --d-panel: #FFFFFF; --d-panel-2: #F6F8FB; --d-line: #E1E6EC; --d-text: #14202E; --d-mut: #5B6777;
+  color-scheme: light;
+}
+html[data-theme="light"] .disp .d-top { background: #FFFFFF; }
+html[data-theme="light"] .disp .d-top .brand { color: var(--d-text); }
+html[data-theme="light"] .disp .lang-switch { background: #E8ECF1; }
+html[data-theme="light"] .disp .lang-btn.is-active { background: var(--navy); color: #fff; }
+html[data-theme="light"] .disp .theme-btn { color: var(--d-text); border-color: var(--d-line); background: var(--d-panel-2); }
+html[data-theme="light"] .disp .d-btn:hover:not(:disabled), html[data-theme="light"] .disp .btn-xs:hover:not(:disabled),
+html[data-theme="light"] .disp .menu-list button:hover { background: #E8ECF1; }
+html[data-theme="light"] .disp .d-chip.is-ok { color: #14805A; border-color: #A7E3C9; }
+html[data-theme="light"] .disp .d-chip.is-bad { color: #8A5A00; border-color: #F3D48A; background: #FFF4DC; animation: none; }
+html[data-theme="light"] .disp .kpi.is-alarm, html[data-theme="light"] .disp .al-card.is-pending, html[data-theme="light"] .disp .outage.is-on { background: #FDECEC; border-color: #F1A7AC; }
+html[data-theme="light"] .disp .kpi.is-alarm[style*="C9B3FF"], html[data-theme="light"] .disp .sos-item.is-priority { background: #F6F2FF; border-color: #C4B5FD; box-shadow: none; }
+html[data-theme="light"] .disp .tag { background: #EEF1F5; color: #4A5868; }
+html[data-theme="light"] .disp .tag.red { background: #FDECEC; color: #B3122E; }
+html[data-theme="light"] .disp .tag.amber { background: #FFF4DC; color: #8A5A00; }
+html[data-theme="light"] .disp .tag.green { background: #E6F6EF; color: #14805A; }
+html[data-theme="light"] .disp .tag.blue { background: #E8F0FE; color: #1D4ED8; }
+html[data-theme="light"] .disp .tag.violet { background: #EDE7FB; color: #6D28D9; }
+html[data-theme="light"] .disp .sos-note { color: var(--d-text); }
+html[data-theme="light"] .disp .al-acts { color: var(--d-mut); }
+html[data-theme="light"] .disp .al-acts svg { color: #14805A; }
+html[data-theme="light"] .disp .al-acts li.warn svg { color: #8A5A00; }
+html[data-theme="light"] .disp .d-table td, html[data-theme="light"] .disp .road-item { border-bottom-color: var(--d-line); }
+html[data-theme="light"] .disp .tbar .bar, html[data-theme="light"] .disp .spark i.is-zero { background: #E1E6EC; }
+html[data-theme="light"] .disp .d-legend { background: rgba(255, 255, 255, .94); }
+html[data-theme="light"] .disp .d-mapwrap #map { background: #DDE3EA; }
+html[data-theme="light"] .disp .br-ico { background: #E8F0FE; color: #1D4ED8; }
+html[data-theme="light"] .disp .acc-mini { color: #6D28D9; }
+html[data-theme="light"] .disp .fc-soon { color: #B3122E; }
+html[data-theme="light"] .disp .fc-rising { color: #8A5A00; }
+html[data-theme="light"] .disp .outage-state { color: var(--d-mut); }
+html[data-theme="light"] .disp .outage.is-on .outage-state { color: #B3122E; }
+html[data-theme="light"] .disp .login { background: radial-gradient(900px 500px at 70% 0%, #DCE8F5 0%, transparent 60%), #F3F5F8; }
+html[data-theme="light"] .disp .leaflet-popup-content-wrapper, html[data-theme="light"] .disp .leaflet-popup-tip,
+html[data-theme="light"] .disp .leaflet-tooltip, html[data-theme="light"] .disp .leaflet-bar a { background: #fff; color: #14202E; border-color: #E1E6EC; }
+html[data-theme="light"] .disp .leaflet-tooltip-top::before { border-top-color: #fff; }
+html[data-theme="light"] .disp .leaflet-control-attribution { background: rgba(255, 255, 255, .85); color: #5B6777; }
+html[data-theme="light"] .disp ::-webkit-scrollbar-thumb { background: #C5CEDA; }
+html[data-theme="dark"] .disp .leaflet-control-layers { background: #18263A; color: #E8EEF5; }
+/* Açıq temada KPI rəngləri (tünd fon üçün seçilmiş açıq tonlar) kontrastlı variantlarla əvəz olunur */
+html[data-theme="light"] .disp .kpi[style*="#FF5A5F"] { --k: #D92D20; }
+html[data-theme="light"] .disp .kpi[style*="#6EE7B7"] { --k: #12805C; }
+html[data-theme="light"] .disp .kpi[style*="#9EC0FF"] { --k: #1D4ED8; }
+html[data-theme="light"] .disp .kpi[style*="#C9B3FF"] { --k: #6D28D9; }
+html[data-theme="light"] .disp .kpi[style*="#FFD08A"] { --k: #A16207; }

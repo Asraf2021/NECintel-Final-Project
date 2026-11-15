@@ -112,7 +112,7 @@
     L.control.zoom({ position: "topright" }).addTo(map);
     // Plitə mənbələri (API açarı tələb etmir). OSM-in istifadə siyasəti Referer başlığı tələb edir:
     // plitə sorğularında yalnız saytın mənşəyi (origin) göndərilir — səhifə yolu deyil.
-    const cls = dark ? "tiles-dark" : "";
+    const cls = "";  // tünd tema plitələri CSS ilə tündləşdirir (html[data-theme="dark"])
     const bases = {
       "OpenStreetMap": L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19, className: cls, referrerPolicy: "strict-origin-when-cross-origin",
@@ -180,6 +180,33 @@
     box.appendChild(el);
     setTimeout(() => { el.classList.add("is-out"); setTimeout(() => el.remove(), 300); }, 4200);
   }
+
+  // ----- Tema: açıq / tünd. Seçim yadda saxlanılır; səhifənin standart teması <body data-default-theme> -----
+  const SUN = svg('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>');
+  const MOON = svg('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>');
+  function currentTheme() { return document.documentElement.dataset.theme || "light"; }
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = theme === "dark" ? "#0A121C" : "#0B1F33";
+    document.querySelectorAll("[data-theme-toggle]").forEach((b) => {
+      b.innerHTML = theme === "dark" ? SUN : MOON;
+      const label = t(theme === "dark" ? "theme.light" : "theme.dark");
+      b.title = label; b.setAttribute("aria-label", label);
+    });
+  }
+  function initTheme() {
+    let saved = null;
+    try { saved = localStorage.getItem("uce_theme"); } catch (e) { /* ignore */ }
+    applyTheme(saved || document.body.dataset.defaultTheme || "light");
+    document.querySelectorAll("[data-theme-toggle]").forEach((b) => b.addEventListener("click", () => {
+      const next = currentTheme() === "dark" ? "light" : "dark";
+      try { localStorage.setItem("uce_theme", next); } catch (e) { /* ignore */ }
+      applyTheme(next);
+    }));
+    window.I18N.onChange(() => applyTheme(currentTheme()));
+  }
+  document.addEventListener("DOMContentLoaded", initTheme);
 
   window.UCE = { fcText, nm, api, esc, connectStream, fmtDist, fmtMin, fmtNum, timeAgo, debounce, levelColor, LEVEL_COLOR,
     ICON, TYPE_ICON, createMap, shelterIcon, toast, t };

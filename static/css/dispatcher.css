@@ -205,7 +205,7 @@
 .fc-full { color: #FF5A5F; }
 
 /* OSM plitələri tünd panel üçün invert edilir (CARTO tünd stil API açarı tələb edir) */
-.disp .tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(.82) contrast(.88) saturate(.55); }
+
 
 /* Drop 2: Xarici API kəsintisi açarı */
 .outage { display: inline-flex; align-items: center; gap: 8px; padding: 4px 8px 4px 10px; border-radius: 10px; border: 1px solid var(--d-line); background: var(--d-panel-2); }

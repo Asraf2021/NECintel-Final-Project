@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/static/css/base.css">
   <link rel="stylesheet" href="/static/css/dispatcher.css">
 </head>
-<body class="disp">
+<body class="disp" data-default-theme="dark">
   <header class="d-top">
     <a class="brand" href="/" data-i18n-title="common.back"><span class="brand-mark" id="brandMark"></span><span class="d-title" data-i18n="d.title">Fövqəladə Hallar Dispetçer Paneli</span></a>
     <div class="d-top-right">
@@ -26,6 +26,7 @@
         <button class="btn btn-sm d-btn" id="simBtn" type="button" aria-haspopup="true" aria-expanded="false"><span id="icoPlay"></span><span data-i18n="d.sim.title">Simulyasiya</span></button>
         <div class="menu-list" id="simList" hidden></div>
       </div>
+      <button class="theme-btn" type="button" data-theme-toggle></button>
       <div class="lang-switch" data-lang-switch role="group" data-i18n-aria="aria.lang"></div>
       <button class="btn btn-sm d-btn" id="logoutBtn" type="button" hidden><span id="userName"></span><span id="icoLogout"></span></button>
     </div>
