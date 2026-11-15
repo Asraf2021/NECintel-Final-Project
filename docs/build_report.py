@@ -85,6 +85,23 @@ CHALLENGE_DROPS: list[dict] = [
             "kəsinti). 11 yeni avtomatik test, cəmi 381 test uğurlu.",
         ],
     },
+    {
+        "title": "Drop 3 (14:00) — SOS daşqını (500+ saxta SOS), RBAC və < 300 ms gecikmə",
+        "paragraphs": [
+            "Tələb: eyni anda 500-dən çox saxta SOS; SOS endpoint-ləri rate limit və dublikat filtrasiyası ilə qorunmalı, "
+            "dispetçer paneli bloklanmamalı, briqada yönləndirilməsi JWT / RBAC ilə qorunmalı, orta gecikmə < 300 ms.",
+            "Həll: çoxqatlı müdafiə — IP və vətəndaş üzrə rate limit, 30 s dəqiq dublikat, botnet üçün daşqın detektoru "
+            "(10 s-də ≥ 40 anonim SOS, histerezis), daşqında yaxın dublikatların birləşdirilməsi (≤ 30 m, ≤ 60 s) və anonim "
+            "siqnalların karantinə alınması. Karantin siqnalları paneldə tək-tək göstərilmir, Qırmızı Həyəcan alqoritminə "
+            "düşmür, briqada göndərmir; detektordan əvvəl keçmiş botlar geriyə dönük karantinə köçürülür. myGov ilə "
+            "qeydiyyatlı vətəndaşlar və Priority #1 SOS karantinə düşmür. Dispetçer karantini bir kliklə qəbul edir və ya silir.",
+            "RBAC: briqada göndərmək və həyəcanın təsdiqi ayrıca brigade:dispatch icazəsi tələb edir; yalnız-baxış operator "
+            "rolu əlavə olundu (kritik əməliyyatlarda 403).",
+            "Performans: saf ASGI middleware, asinxron SOS endpoint-i, indeks. 600 saxta SOS + 80 paralel real sorğu: "
+            "orta gecikmə 203 ms (tək IP) və 227 ms (botnet), 0 xəta, panelə 0 saxta SOS və 0 saxta həyəcan düşdü "
+            "(əvvəl orta 1 669 ms idi). 20 yeni test, cəmi 415 test uğurlu.",
+        ],
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -365,7 +382,7 @@ SECTIONS: list[dict] = [
                   "yolu verməyə və fon tapşırığını söndürməyə imkan verir, xarici API simulyatoru isə proses daxilində "
                   "işləyir — ona görə testlər şəbəkə və əlavə servis tələb etmir. İşə salma: python -m pytest -q. "
                   "Nəticələr README-də göstərilib."),
-            ("p", "Nəticə: 390 avtomatik test, hamısı uğurlu (≈25 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
+            ("p", "Nəticə: 415 avtomatik test, hamısı uğurlu (≈25 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
                   "yoxlayır: 3 və 4 fərqli SOS, eyni vətəndaşdan təkrar siqnal, 5 dəqiqəlik pəncərə, 500 m radius, "
                   "doluluğun dəqiq 95% və 95%-dən yuxarı olması, 90% marşrut həddi. Test yazılarkən 5 real qüsur "
                   "aşkarlandı və düzəldildi (faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi, vətəndaşın "

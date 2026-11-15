@@ -484,7 +484,40 @@ JWT (HS256) və müddətli tokenlər, PBKDF2-HMAC-SHA256 parol heşi, icazə əs
 
 ### Drop 3 (14:00)
 
-<!-- DROP_3 -->
+**Tələb:** böhran zamanı panika və ya bot hücumu nəticəsində sistemə eyni anda 500-dən çox SAXTA SOS sorğusu göndərilir (SOS Flood / Spam Attack). SOS endpoint-ləri Rate Limiting və dublikat filtrasiyası ilə qorunmalı (saxta sorğular dispetçer panelini bloklamamalı), dispetçer panelinin kritik əməliyyatları (xilasetmə briqadasının yönləndirilməsi) JWT / RBAC ilə təhlükəsizləşdirilməli, kütləvi sorğular zamanı orta cavab müddəti 300 ms-dən aşağı qalmalıdır.
+
+**Müdafiə qatları:**
+
+| Qat | Nə edir | Harada |
+|---|---|---|
+| 1. Rate limit | IP üzrə (dəqiqədə 30 SOS) və vətəndaş ID-si üzrə (dəqiqədə 6) → `429 + Retry-After` | `app/routers/citizen.py` |
+| 2. Dəqiq dublikat | Eyni vətəndaş + eyni növ, 30 s → yeni sətir yaranmır | `app/services/sos.py` |
+| 3. Daşqın detektoru | Botnet (çox IP, təsadüfi ID) IP limitindən yan keçir → sürüşən pəncərə: 10 s-də ≥ 40 anonim SOS = daşqın rejimi (histerezis: axın yarıya enəndən 30 s sonra söner) | `app/services/flood.py` |
+| 4. Yaxın dublikat birləşdirmə | Daşqında eyni növ, ≤ 30 m, ≤ 60 s → bir kart, "+N oxşar siqnal" sayğacı | `sos._near_duplicate` |
+| 5. Karantin | Daşqında yeni anonim SOS `suspect` statusu alır: dispetçer panelində tək-tək kart kimi görünmür, **Qırmızı Həyəcan alqoritminə daxil edilmir, briqada göndərilmir**; SSE hadisələri saniyədə 1-ə seyrəldilir. Detektordan əvvəl keçmiş botlar (son 10 s) də geriyə dönük karantinə köçürülür və onların yaratdığı klaster həyəcanları avtomatik bağlanır | `sos.create_sos`, `sos._retro_quarantine` |
+| 6. Etibarlı vətəndaş keçir | myGov ilə qeydiyyatlı / təsdiqlənmiş vətəndaşın və Priority #1 SOS-un karantinə düşmür | `sos.create_sos` (`trust`) |
+| 7. Dispetçer qərarı | Zolaqda "Real kimi qəbul et" / "Spam kimi sil" (audit jurnalı) | `POST /api/v1/dispatch/quarantine/release` · `/discard` |
+
+**JWT / RBAC:** briqada göndərmək (`POST /dispatch/sos/{id}/assign`) və Qırmızı Həyəcanın təsdiqi (`/alerts/{id}/confirm` — briqada göndərir) ayrıca **`brigade:dispatch`** icazəsi tələb edir. Yeni **`operator`** rolu (demo: `operator` / `operator123`) paneli yalnız görür — kritik düymələr yoxdur, API birbaşa çağırılsa **403**. Token olmadan / saxta / vaxtı keçmiş token → 401; vətəndaş tokeni → 403. Bütün kritik əməliyyatlar audit jurnalındadır.
+
+**Performans:** təhlükəsizlik başlıqları middleware-i saf ASGI-yə köçürüldü (`BaseHTTPMiddleware` əvəzinə), SOS endpoint-i asinxron edildi, aktiv SOS siyahısı daşqında sıxışdırılmasın deyə ayrıca sorğu ilə alınır, `(status, created_at)` indeksi əlavə olundu. Xidmət qatında bir SOS **0,09 ms**.
+
+**Ölçmə** — `scripts/sos_flood_test.py`: 600 saxta SOS eyni anda + 60 real istifadəçi sorğusu + 20 dispetçer icmalı (1 server prosesi):
+
+| Ssenari | Orta gecikmə | p95 | Nəticə | Dispetçer paneli |
+|---|---|---|---|---|
+| Tək IP-dən hücum | **203 ms** | 351 ms | 30 qəbul, 570 → 429 | 30 aktiv SOS |
+| Botnet (IP limiti qaldırılıb) | **227 ms** | 371 ms | 600 × 201, 0 xəta | **0 saxta aktiv SOS**, ~410 karantin, ~185 birləşdirilmiş, **0 saxta həyəcan** |
+
+(Əvvəl: eyni test orta 1 669 ms idi — darboğaz `BaseHTTPMiddleware` və thread-pool keçidi idi.)
+
+**Demo:** dispetçer panelində "Simulyasiya" → **"SOS daşqını hücumu (600 saxta SOS)"** → yuxarıda narıncı zolaq "SOS DAŞQINI AŞKARLANDI", "Karantin" KPI kartı, aktiv SOS siyahısı təmiz qalır → "Spam kimi sil". Sonra `operator` / `operator123` ilə girin — briqada düymələri yoxdur. Yük testi:
+
+```bash
+python scripts/sos_flood_test.py --url http://127.0.0.1:8000 --sos 600
+```
+
+**Testlər:** `tests/test_drop3_flood.py` — 20 test (rate limit, dublikat, 600 SOS botnet, yaxın dublikat birləşdirmə, saxta Qırmızı Həyəcanın qarşısı, təsdiqlənmiş vətəndaşın keçməsi, karantin, RBAC, SSE seyrəltmə, histerezis, gecikmə). Cəmi: **415 test, hamısı uğurlu**.
 
 ---
 
@@ -554,7 +587,7 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-**Nəticə (15.11.2026):** `390 passed in 25.28s` — 390 test, hamısı uğurlu.
+**Nəticə (15.11.2026):** `415 passed in 24.93s` — 415 test, hamısı uğurlu.
 
 | Fayl | Test | Nəyi yoxlayır |
 |---|---|---|
@@ -567,6 +600,7 @@ python -m pytest -q
 | `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
 | `tests/test_priority.py` | 48 | Drop 1: prioritet rol, Kritik Prioritet SOS, əlçatan marşrut, briqada seçimi, miqrasiya, i18n tamlığı |
 | `tests/test_mygov.py` | 57 | myGov ilə qeydiyyat: OAuth2 + PKCE axını, popup / təsdiq, arayış nömrəsinin myGov reyestrində yoxlanması (başqasının / uydurma / müddəti bitmiş), fayl yükləmə, fayl yoxlamaları, başqasının adından əməliyyatın qarşısı, dispetçer yoxlaması |
+| `tests/test_drop3_flood.py` | 20 | Drop 3: SOS daşqını — rate limit, dublikat, karantin, saxta həyəcanın qarşısı, RBAC (`brigade:dispatch`, `operator`), gecikmə |
 | `tests/test_alert_rearm.py` | 9 | Hər 95% keçidində yeni həyəcan, 95%-dən aşağıda avtomatik bağlanma, spam yoxdur, "Hamısını bağla" |
 | `tests/test_drop2_outage.py` | 11 | Drop 2: 503 və > 5 s timeout, breaker, 3 ehtiyat səviyyəsi, 500 yoxdur, bərpa |
 | `tests/test_replan.py` | 8 | Fon planlayıcısı: dərhal cavab, siqnalların birləşdirilməsi, hesablama zamanı gələn siqnal, xətaya davamlılıq; fallback Dijkstra event loop thread-ində işləmir; məhdud paralellik |

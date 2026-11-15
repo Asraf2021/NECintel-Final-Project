@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import random
+import time
 import uuid
 
 from ..config import settings
@@ -67,11 +68,32 @@ def default_users() -> list[dict]:
          "role": "dispatcher", "display_name": "Dispetçer 01"},
         {"username": "admin", "password_hash": hash_password(settings.admin_password),
          "role": "admin", "display_name": "Administrator"},
+        {"username": "operator", "password_hash": hash_password(settings.operator_password),
+         "role": "operator", "display_name": "Operator (yalnız baxış)"},
     ]
 
 
 async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: str | None, edge_id: str | None,
               mode: str | None = None) -> dict:
+    if name == "sos_flood":
+        # Botnet simulyasiyası: 600 saxta SOS, hər biri fərqli "vətəndaş ID"-si ilə (fərqli IP-lərdən gəlmiş kimi —
+        # IP limiti bunu tutmur, buna görə daşqın detektoru və dublikat filtri işə düşür)
+        started = time.perf_counter()
+        hotspots = [(d["lat"], d["lon"]) for d in random.sample(ctx.districts, 3)]
+        stats = {"created": 0, "quarantined": 0, "merged": 0, "duplicate": 0}
+        for i in range(600):
+            if i % 3 == 0:  # üçdə biri eyni nöqtələrdən (tipik bot davranışı)
+                lat, lon = random.choice(hotspots)
+            else:
+                lat, lon = random.uniform(40.36, 40.45), random.uniform(49.80, 49.96)
+            res = sos_svc.create_sos(ctx, f"bot-{uuid.uuid4().hex[:16]}", random.choice(["fire", "collapse", "flood", "medical"]),
+                                     lat, lon, "")
+            key = "merged" if res.get("merged") else "quarantined" if res.get("quarantined") else "duplicate" if res["duplicate"] else "created"
+            stats[key] += 1
+        ctx.bus.publish("flood_status", ctx.flood.status(), channel="ops")
+        return {"scenario": name, **stats, "elapsed_ms": round((time.perf_counter() - started) * 1000),
+                "avg_ms_per_sos": round((time.perf_counter() - started) * 1000 / 600, 2), "flood": ctx.flood.status()}
+
     if name == "sos_cluster":
         d = ctx.district(district_id) if district_id else None
         d = d or random.choice(ctx.districts)
@@ -192,6 +214,8 @@ async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: s
 
     if name == "reset":
         stop_inflow(ctx)
+        if ctx.flood:
+            ctx.flood.reset()
         await ctx.routing.sim("reset")
         ctx.routing.manual_closures.clear()
         ctx.routing.breaker.success()

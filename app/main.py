@@ -93,6 +93,36 @@ class BodyLimitMiddleware:
         await response({"type": "http"}, None, send)
 
 
+class SecurityHeadersMiddleware:
+    """Hər cavaba təhlükəsizlik və keş başlıqları əlavə edir (mövcud başlıqların üzərinə yazmır)."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        path = scope.get("path", "")
+        extra = dict(SECURITY_HEADERS)
+        if path in ("/docs", "/redoc", "/docs/oauth2-redirect"):
+            extra.pop("Content-Security-Policy")  # Swagger UI öz skriptlərini CDN-dən yükləyir
+        if path.startswith("/api/"):
+            extra["Cache-Control"] = "no-store"
+        elif path in ("/", "/citizen", "/dispatcher") or (path.startswith("/static/") and "/vendor/" not in path):
+            extra["Cache-Control"] = "no-cache"  # yeniləmədən sonra köhnə JS/CSS qalmasın (ETag/304 ucuzdur)
+        encoded = [(k.lower().encode("latin-1"), v.encode("latin-1")) for k, v in extra.items()]
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers") or [])
+                present = {h[0].lower() for h in headers}
+                headers += [h for h in encoded if h[0] not in present]
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+
 def _external_client() -> httpx.AsyncClient:
     """Xarici API müştərisi. URL verilməyibsə, simulyator eyni prosesdə (şəbəkəsiz) çağırılır."""
     if settings.external_api_url:
@@ -138,6 +168,8 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
             routing.manual_closures[row["edge_id"]] = {"reason": row["reason"], "since": row["created_at"]}
         ctx = AppContext(db=db, bus=EventBus(), graph=graph, routing=routing, city=city)
         # Fon rejimində yenidən marşrutlaşdırma sorğu yolundan çıxarılır; testlərdə (fon söndürülüb) sinxron qalır
+        from .services.flood import FloodGuard
+        ctx.flood = FloodGuard()
         ctx.replan = ReplanScheduler(ctx, inline=not start_background)
         ctx.replan.start()
         app.state.ctx = ctx
@@ -162,21 +194,8 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
     if settings.cors_origins:
         app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["*"], allow_headers=["*"])
 
-    @app.middleware("http")
-    async def harden(request: Request, call_next):
-        response = await call_next(request)
-        is_api_docs = request.url.path in ("/docs", "/redoc", "/docs/oauth2-redirect")
-        for k, v in SECURITY_HEADERS.items():
-            if k == "Content-Security-Policy" and is_api_docs:
-                continue  # Swagger UI öz skriptlərini CDN-dən yükləyir; sərt CSP yalnız tətbiq səhifələrinə tətbiq olunur
-            response.headers.setdefault(k, v)
-        path = request.url.path
-        if path.startswith("/api/"):
-            response.headers.setdefault("Cache-Control", "no-store")
-        elif path in ("/", "/citizen", "/dispatcher") or (path.startswith("/static/") and "/vendor/" not in path):
-            # Brauzer hər dəfə yoxlasın (ETag/304 ilə ucuzdur) — yeniləmədən sonra köhnə JS/CSS qalmasın
-            response.headers.setdefault("Cache-Control", "no-cache")
-        return response
+    # Təhlükəsizlik başlıqları — saf ASGI middleware (BaseHTTPMiddleware-dən xeyli sürətli; Drop 3: kütləvi sorğular)
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Ən xarici qat: gövdə ölçüsü həddi (Content-Length və chunked axın üçün eyni qayda)
     app.add_middleware(BodyLimitMiddleware, limit=MAX_BODY_BYTES,
@@ -201,6 +220,7 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
                 "uptime_s": round(time.time() - request.app.state.started_at),
                 "routing": ctx.routing.status(),
                 "replan": ctx.replan.status(),
+                "flood": ctx.flood.status(),
                 "events": {"clients": ctx.bus.subscriber_count, "published": ctx.bus.published, "dropped": ctx.bus.dropped}}
 
     # ----- Frontend (statik) -----

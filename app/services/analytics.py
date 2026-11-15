@@ -31,8 +31,10 @@ def overview(ctx: AppContext) -> dict:
     shelters = forecast.attach(ctx, shelter_svc.list_shelters(ctx, include_reserve=True))
     open_sh = [s for s in shelters if s["status"] == "open"]
     brigades = list_brigades(ctx)
-    sos_list = sos_svc.list_sos(ctx, limit=300)
-    active = [s for s in sos_list if s["status"] in ("active", "assigned")]
+    # Aktiv SOS-lar ayrıca sorğu ilə: daşqın zamanı köhnə real siqnallar siyahıdan sıxışdırılıb çıxmasın
+    active = sos_svc.list_sos(ctx, statuses=("active", "assigned"), limit=300)
+    history = sos_svc.list_sos(ctx, statuses=("resolved", "safe"), limit=60)
+    sos_list = active + history
     recent = [s for s in sos_list if s["created_at"] >= now - window]
     alerts = crisis.list_alerts(ctx)
     pending = [a for a in alerts if a["status"] == "pending"]
@@ -81,6 +83,8 @@ def overview(ctx: AppContext) -> dict:
         "generated_at": now,
         "kpi": {
             "sos_active": len(active),
+            "sos_quarantine": sos_svc.quarantine_count(ctx),
+            "sos_merged": ctx.db.scalar("SELECT COALESCE(SUM(dup_count),0) FROM sos_signals WHERE status IN ('active','assigned','suspect')") or 0,
             "sos_priority": sum(1 for s in active if s["priority"] == 1),
             "sos_window": len(recent),
             "alerts_pending": len(pending),
@@ -103,6 +107,7 @@ def overview(ctx: AppContext) -> dict:
         "alerts": alerts,
         "closures": ctx.routing.closures_list(),
         "routing": ctx.routing.status(),
+        "flood": ctx.flood.status() if ctx.flood else None,
         "timeline": buckets,
         "by_type": by_type_all,
         "thresholds": {

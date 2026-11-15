@@ -206,7 +206,7 @@
   // ---------- Render ----------
   function render() {
     if (!state.data) return;
-    renderAlertStrip(); renderKpis(); renderSos(); renderAlerts(); renderBrigades(); renderZones(); renderShelters();
+    renderFlood(); renderAlertStrip(); renderKpis(); renderSos(); renderAlerts(); renderBrigades(); renderZones(); renderShelters();
     renderCharts(); renderRoads(); renderVerifs(); renderRouting(); drawMap();
   }
 
@@ -217,12 +217,25 @@
     return t(det.trigger === "radius" ? "d.alert.cluster_radius" : "d.alert.cluster", { zone: zoneName(a.district_id, a.district_name), n });
   }
 
+  // Drop 3: SOS daşqını zolağı + karantin idarəsi
+  function renderFlood() {
+    const f = state.data.flood || {};
+    const k = state.data.kpi;
+    const manage = can("sos:manage");
+    if (!f.active && !k.sos_quarantine) { $("floodStrip").innerHTML = ""; return; }
+    $("floodStrip").innerHTML = '<div class="flood-banner' + (f.active ? " is-active" : "") + '" role="status"><span class="a-ico">' + ICON.shield + "</span><div>" +
+      (f.active ? '<div class="a-head">' + esc(t("d.flood.title")) + '</div><div class="a-what">' + esc(t("d.flood.text", { rate: f.rate, win: f.window_s, thr: f.threshold })) + "</div>" : "") +
+      '<div class="a-act">' + esc(t("d.flood.q", { n: fmtNum(k.sos_quarantine) })) + (k.sos_merged ? " · " + esc(t("d.flood.merged", { n: fmtNum(k.sos_merged) })) : "") + "</div></div>" +
+      '<div class="a-btns">' + (manage && k.sos_quarantine ? '<button class="btn btn-sm" type="button" data-qrelease="1">' + esc(t("d.flood.release")) +
+      '</button><button class="btn btn-sm btn-danger" type="button" data-qdiscard="1">' + esc(t("d.flood.discard")) + "</button>" : "") + "</div></div>";
+  }
+
   function renderAlertStrip() {
     const pending = state.data.alerts.filter((a) => a.status === "pending");
     if (!pending.length) { $("alertStrip").innerHTML = ""; return; }
     const a = pending[0];
     const more = pending.length > 1 ? ' <span class="tag red">+' + (pending.length - 1) + "</span>" : "";
-    const decide = can("alert:decide");
+    const decide = can("brigade:dispatch");
     $("alertStrip").innerHTML = '<div class="alert-banner" role="alert"><span class="a-ico">' + ICON.alert + '</span><div><div class="a-head">' +
       esc(t("d.alert.headline")) + more + '</div><div class="a-act">' + esc(t("d.alert.action")) + '</div><div class="a-what">' + esc(alertText(a)) +
       '</div></div><div class="a-btns">' + (decide ? '<button class="btn btn-confirm" type="button" data-confirm="' + a.id + '">' + ICON.check + "<span>" + esc(t("d.alert.confirm")) +
@@ -240,6 +253,7 @@
     const occColor = k.occupancy_pct >= 90 ? "#FF5A5F" : k.occupancy_pct >= 70 ? "#F2A20C" : "#6EE7B7";
     const occBar = '<div class="bar" style="--c:' + occColor + '"><i style="width:' + Math.min(100, k.occupancy_pct) + '%"></i></div>';
     $("kpis").innerHTML =
+      (k.sos_quarantine ? kpi(ICON.shield, t("d.kpi.quarantine"), fmtNum(k.sos_quarantine), t("d.kpi.quarantine_sub"), "#FFD08A", true) : "") +
       kpi(ICON.signal, t("d.kpi.sos"), k.sos_active, t("d.kpi.sos_sub", { n: k.sos_window }), k.sos_active ? "#FF5A5F" : null) +
       kpi(ICON.wheelchair, t("d.kpi.priority"), k.sos_priority, t("d.kpi.priority_sub"), k.sos_priority ? "#C9B3FF" : null, k.sos_priority > 0) +
       kpi(ICON.alert, t("d.kpi.alerts"), k.alerts_pending, t("d.kpi.alerts_sub"), k.alerts_pending ? "#FF5A5F" : null, k.alerts_pending > 0) +
@@ -263,10 +277,11 @@
       const tag = s.status === "active" ? "red" : s.status === "assigned" ? "amber" : "green";
       let btns = "";
       if (manage && !done) {
-        btns = '<div class="sos-btns">' + (s.status === "active" ? '<button class="btn-xs pri" type="button" data-assign="' + s.id + '">' + esc(t("d.sos.assign")) + "</button>" : "") +
+        btns = '<div class="sos-btns">' + (s.status === "active" && can("brigade:dispatch") ? '<button class="btn-xs pri" type="button" data-assign="' + s.id + '">' + esc(t("d.sos.assign")) + "</button>" : "") +
           '<button class="btn-xs" type="button" data-resolve="' + s.id + '">' + esc(t("d.sos.resolve")) + "</button></div>";
       }
-      const brig = s.brigade_id && brigades[s.brigade_id] ? " · " + esc(brigades[s.brigade_id]) : "";
+      const brig = (s.brigade_id && brigades[s.brigade_id] ? " · " + esc(brigades[s.brigade_id]) : "") +
+        (s.dup_count ? ' <span class="tag amber">' + esc(t("d.sos.merged", { n: s.dup_count })) + "</span>" : "");
       const ver = s.verification === "verified" ? '<span class="tag green">' + esc(t("d.ver.verified")) + "</span>"
         : (s.verification === "pending_review" || s.verification === "mygov_record") ? '<span class="tag amber">' + esc(t("d.ver.pending")) + "</span>"
           : '<span class="tag">' + esc(t("d.ver.unverified")) + "</span>";
@@ -284,11 +299,11 @@
     $("alertsAllBtn").hidden = !(pendingN > 1 && can("alert:decide"));
     $("alertsAllBtn").textContent = t("d.alert.dismiss_all", { n: pendingN });
     if (!list.length) { $("alertList").innerHTML = '<div class="d-empty">' + esc(t("d.alerts.empty")) + "</div>"; return; }
-    const decide = can("alert:decide");
+    const decide = can("brigade:dispatch");
     $("alertList").innerHTML = list.map((a) => {
       const st = a.status === "pending" ? '<span class="tag red">' + esc(t("d.alert.pending")) + "</span>"
         : a.status === "confirmed" ? '<span class="tag green">' + esc(t("d.alert.confirmed")) + "</span>"
-          : a.status === "auto_resolved" ? '<span class="tag blue">' + esc(t("d.alert.auto_resolved")) + "</span>"
+          : a.status === "auto_resolved" ? '<span class="tag blue">' + esc(t(a.decided_by === "flood_guard" ? "d.alert.flood_closed" : "d.alert.auto_resolved")) + "</span>"
             : '<span class="tag">' + esc(t("d.alert.dismissed")) + "</span>";
       let body = "";
       if (a.status === "pending" && decide) {
@@ -445,7 +460,7 @@
   }
 
   function renderSimMenu() {
-    const items = ["sos_cluster", "priority_sos", "shelter_fill", "crowd", "inflow_start", "inflow_stop", "-", "road_close", "road_open_all", "-", "api_outage", "api_outage_timeout", "api_restore", "-", "reset"];
+    const items = ["sos_cluster", "priority_sos", "sos_flood", "shelter_fill", "crowd", "inflow_start", "inflow_stop", "-", "road_close", "road_open_all", "-", "api_outage", "api_outage_timeout", "api_restore", "-", "reset"];
     $("simList").innerHTML = items.map((n) => n === "-" ? "<hr>" : '<button type="button" data-sim="' + n + '">' + esc(t("d.sim." + n)) + "</button>").join("");
   }
 
@@ -491,6 +506,12 @@
           toast([ac.brigade ? t("d.alert.done_brigade", { name: ac.brigade.name, dist: fmtDist(ac.brigade.distance_m) }) : t("d.alert.no_brigade"),
             ac.new_shelter ? t("d.alert.done_shelter", { name: ac.new_shelter.name, cap: fmtNum(ac.new_shelter.capacity) }) : t("d.alert.no_shelter")].join(" · "), "success");
         }
+      } else if (ds.qrelease) {
+        const res = await action(() => call("/dispatch/quarantine/release", { method: "POST" }));
+        if (res) toast(t("d.toast.released", { n: res.released }), "success");
+      } else if (ds.qdiscard) {
+        const res = await action(() => call("/dispatch/quarantine/discard", { method: "POST" }));
+        if (res) toast(t("d.toast.discarded", { n: res.discarded }), "success");
       } else if (ds.dismissAll) {
         el.disabled = true;
         const res = await action(() => call("/dispatch/alerts/dismiss-all", { method: "POST" }));
@@ -519,7 +540,10 @@
         if (ds.sim === "api_outage" || ds.sim === "api_outage_timeout") state.outageOn = true;
         if (ds.sim === "api_restore") state.outageOn = false;
         const body = ds.sim === "api_outage_timeout" ? { name: "api_outage", mode: "timeout" } : { name: ds.sim, mode: ds.sim === "api_outage" ? "error" : undefined };
-        action(() => call("/dispatch/demo/scenario", { method: "POST", body }), t("d.sim." + ds.sim) + " — " + t("d.toast.done"));
+        if (ds.sim === "sos_flood") {
+          const r = await action(() => call("/dispatch/demo/scenario", { method: "POST", body }));
+          if (r) toast(t("d.toast.flood_done", { q: r.quarantined, m: r.merged, c: r.created, ms: r.avg_ms_per_sos }), "success");
+        } else action(() => call("/dispatch/demo/scenario", { method: "POST", body }), t("d.sim." + ds.sim) + " — " + t("d.toast.done"));
       }
     });
 

@@ -75,6 +75,8 @@ MIGRATIONS = [
     ("sos_signals", "priority", "INTEGER NOT NULL DEFAULT 2"),
     ("sos_signals", "citizen_role", "TEXT NOT NULL DEFAULT 'citizen'"),
     ("evacuation_plans", "profile", "TEXT NOT NULL DEFAULT 'foot'"),
+    ("sos_signals", "trust", "TEXT NOT NULL DEFAULT 'anonymous'"),
+    ("sos_signals", "dup_count", "INTEGER NOT NULL DEFAULT 0"),
     ("shelters", "name_en", "TEXT NOT NULL DEFAULT ''"),
     ("shelters", "accessible", "INTEGER NOT NULL DEFAULT 1"),
     ("brigades", "name_en", "TEXT NOT NULL DEFAULT ''"),
@@ -106,6 +108,7 @@ class Database:
             if column not in cols:
                 self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
         self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sos_priority ON sos_signals(priority)")
+        self._conn.execute("CREATE INDEX IF NOT EXISTS idx_sos_status_created ON sos_signals(status, created_at)")
 
     def execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
         with self._lock:

@@ -70,15 +70,18 @@ async def evacuation_plan(request: Request, lat: float | None = Query(default=No
 
 
 @router.post("/sos", status_code=201)
-def send_sos(body: SosCreate, request: Request, ctx: AppContext = Depends(get_ctx)):
+async def send_sos(body: SosCreate, request: Request, ctx: AppContext = Depends(get_ctx)):
     """Bir kliklə SOS. IP və vətəndaş üzrə limitlənir (spam / saxta həyəcana qarşı)."""
     identity.ensure_owner(ctx, request, body.citizen_id)
     limit = settings.rate_limit_sos_per_min
     if not limiter.allow(f"sos-ip:{client_ip(request)}", limit * 5) or not limiter.allow(f"sos-c:{body.citizen_id}", limit):
         raise HTTPException(429, "rate_limit_exceeded", headers={"Retry-After": "60"})
     result = sos_svc.create_sos(ctx, body.citizen_id, body.type, body.lat, body.lon, body.note)
-    analytics.invalidate()
-    return {"sos": result["sos"], "duplicate": result["duplicate"]}
+    if not result.get("quarantined") and not result.get("merged"):
+        analytics.invalidate()   # daşqında icmal keşi hər sorğuda sıfırlanmır (1 s mikro-keş qorunur)
+    # Vətəndaşa həmişə "qəbul olundu" cavabı: karantin daxili qərardır, real insan təşvişə düşməməlidir
+    return {"sos": {k: result["sos"][k] for k in ("id", "type", "status", "priority", "created_at")}
+            if result.get("quarantined") else result["sos"], "duplicate": result["duplicate"]}
 
 
 @router.post("/status")

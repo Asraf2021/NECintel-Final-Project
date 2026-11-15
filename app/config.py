@@ -27,6 +27,13 @@ class Settings:
     rate_limit_sos_per_min = int(_env("UCE_RATE_SOS_PER_MIN", "6"))
     rate_limit_login_per_min = int(_env("UCE_RATE_LOGIN_PER_MIN", "10"))
     rate_limit_general_per_min = int(_env("UCE_RATE_GENERAL_PER_MIN", "600"))
+    # Drop 3: SOS daşqını detektoru — pəncərədə bu qədər anonim SOS -> karantin rejimi
+    sos_flood_threshold = int(_env("UCE_SOS_FLOOD_THRESHOLD", "40"))
+    sos_flood_window_s = float(_env("UCE_SOS_FLOOD_WINDOW_S", "10"))
+    sos_flood_cooldown_s = float(_env("UCE_SOS_FLOOD_COOLDOWN_S", "30"))
+    sos_merge_radius_m = float(_env("UCE_SOS_MERGE_RADIUS_M", "30"))
+    sos_merge_window_s = float(_env("UCE_SOS_MERGE_WINDOW_S", "60"))
+    operator_password = _env("UCE_OPERATOR_PASSWORD", "operator123")
 
     # --- myGov ilə qeydiyyat (mock | oidc | off) ---
     mygov_mode = _env("UCE_MYGOV_MODE", "mock")

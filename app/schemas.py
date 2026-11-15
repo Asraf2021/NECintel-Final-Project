@@ -59,7 +59,7 @@ class RoadCloseRequest(BaseModel):
 
 
 class ScenarioRequest(BaseModel):
-    name: Literal["sos_cluster", "priority_sos", "inflow_start", "inflow_stop", "shelter_fill", "road_close", "road_open_all", "api_outage", "api_restore", "crowd", "reset"]
+    name: Literal["sos_cluster", "priority_sos", "sos_flood", "inflow_start", "inflow_stop", "shelter_fill", "road_close", "road_open_all", "api_outage", "api_restore", "crowd", "reset"]
     mode: Optional[Literal["error", "timeout"]] = None   # api_outage üçün: 503 və ya > 5 s cavab
     district_id: Optional[str] = Field(default=None, max_length=32)
     shelter_id: Optional[str] = Field(default=None, max_length=16)

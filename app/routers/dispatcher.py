@@ -35,7 +35,7 @@ def sos_list(status: str | None = Query(default=None, pattern="^(active|assigned
 
 
 @router.post("/sos/{sos_id}/assign")
-def sos_assign(sos_id: int, body: SosAssign, user: dict = Depends(require("sos:manage")),
+def sos_assign(sos_id: int, body: SosAssign, user: dict = Depends(require("brigade:dispatch")),
                ctx: AppContext = Depends(get_ctx)):
     result = sos_svc.assign_brigade(ctx, sos_id, body.brigade_id, user)
     if result is None:
@@ -55,6 +55,26 @@ def sos_resolve(sos_id: int, user: dict = Depends(require("sos:manage")), ctx: A
     return result
 
 
+# ----- Drop 3: SOS daşqını karantini -----
+@router.get("/flood")
+def flood_status(user: dict = Depends(require("ops:read")), ctx: AppContext = Depends(get_ctx)):
+    return {**ctx.flood.status(), "quarantine": sos_svc.quarantine_count(ctx)}
+
+
+@router.post("/quarantine/release")
+def quarantine_release(user: dict = Depends(require("sos:manage")), ctx: AppContext = Depends(get_ctx)):
+    n = sos_svc.release_quarantine(ctx, user)
+    analytics.invalidate()
+    return {"released": n}
+
+
+@router.post("/quarantine/discard")
+def quarantine_discard(user: dict = Depends(require("sos:manage")), ctx: AppContext = Depends(get_ctx)):
+    n = sos_svc.discard_quarantine(ctx, user)
+    analytics.invalidate()
+    return {"discarded": n}
+
+
 # ----- Qırmızı Həyəcan -----
 @router.get("/alerts")
 def alerts(user: dict = Depends(require("ops:read")), ctx: AppContext = Depends(get_ctx)):
@@ -62,7 +82,7 @@ def alerts(user: dict = Depends(require("ops:read")), ctx: AppContext = Depends(
 
 
 @router.post("/alerts/{alert_id}/confirm")
-def alert_confirm(alert_id: int, user: dict = Depends(require("alert:decide")), ctx: AppContext = Depends(get_ctx)):
+def alert_confirm(alert_id: int, user: dict = Depends(require("brigade:dispatch")), ctx: AppContext = Depends(get_ctx)):
     """Bir kliklə təsdiq: əlavə briqada göndərilir + yeni toplanış nöqtəsi açılır."""
     result = crisis.confirm_alert(ctx, alert_id, user)
     if result is None:

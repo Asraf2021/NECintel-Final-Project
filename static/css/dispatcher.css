@@ -223,3 +223,15 @@
 @keyframes chip-blink { 50% { background: #5A3A08; } }
 .chip-sub { display: block; font-weight: 500; font-size: 11px; opacity: .85; }
 .alert-banner .btn-dismiss-all { background: rgba(0,0,0,.18); }
+
+/* Drop 3: SOS daşqını zolağı */
+.flood-banner { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 10px 20px; background: #3A2A0A; color: #FFE7B3; border-bottom: 1px solid #8A5A0A; }
+.flood-banner.is-active { background: linear-gradient(90deg, #6B4700, #8A5A00); color: #fff; }
+.flood-banner .a-ico { font-size: 28px; display: inline-flex; }
+.flood-banner .a-head { font-size: 12px; font-weight: 800; letter-spacing: .12em; }
+.flood-banner .a-what { font-size: 13px; opacity: .95; }
+.flood-banner .a-act { font-size: 15px; font-weight: 750; }
+.flood-banner .a-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.flood-banner .btn { background: #fff; color: #6B4700; border-color: #fff; }
+.flood-banner .btn-danger { background: #B3122E; color: #fff; border-color: #B3122E; }
+html[data-theme="light"] .disp .flood-banner:not(.is-active) { background: #FFF4DC; color: #6B4700; border-color: #F3D48A; }

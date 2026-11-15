@@ -151,7 +151,7 @@ def test_login_wrong_credentials_401(client, ctx, username, password):
     assert r.status_code == 401
     assert r.json() == {"detail": "invalid_credentials"}      # istifadəçinin mövcudluğu sızdırılmır
     assert ctx.db.scalar("SELECT COUNT(*) FROM audit_log WHERE action='login_failed'") == 1
-    assert ctx.db.scalar("SELECT COUNT(*) FROM users") == 2
+    assert ctx.db.scalar("SELECT COUNT(*) FROM users") == 3
 
 
 @pytest.mark.parametrize("payload", [{}, {"username": "dispatcher"}, {"username": "", "password": "x"},

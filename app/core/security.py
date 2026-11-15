@@ -19,8 +19,10 @@ from ..config import settings
 ROLES: dict[str, set[str]] = {
     "dispatcher": {
         "ops:read", "sos:manage", "alert:decide", "shelter:manage", "brigade:manage", "road:manage", "demo:run",
-        "verification:manage",
+        "verification:manage", "brigade:dispatch",
     },
+    # Drop 3: yalnız monitorinq — kritik əməliyyatlar (briqada göndərmək, həyəcan qərarı) qadağandır
+    "operator": {"ops:read"},
     "admin": {"*"},
     # myGov ilə daxil olmuş vətəndaş: yalnız öz məlumatları (dispetçer endpoint-lərinə çıxışı yoxdur)
     "citizen": {"citizen:self"},

@@ -23,6 +23,7 @@ class AppContext:
     city: dict
     replan: Any = field(default=None)       # ReplanScheduler (services/replan.py)
     inflow_task: Any = field(default=None)  # demo: canlı insan axını
+    flood: Any = field(default=None)        # FloodGuard (services/flood.py) — Drop 3
 
     @property
     def districts(self) -> list[dict]:
