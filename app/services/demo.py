@@ -39,7 +39,7 @@ async def _inflow_loop(ctx: AppContext, targets: list[str]) -> None:
                     changed_full = True
             analytics.invalidate()
             if changed_full or tick % 5 == 0:
-                await evacuation.reevaluate_plans(ctx)
+                await ctx.replan.request("inflow")
         except Exception:  # simulyator heç vaxt tətbiqi dayandırmamalıdır
             log.exception("inflow tick failed")
 
@@ -57,7 +57,7 @@ async def _sync_now(ctx: AppContext) -> int:
     """Xarici API-dən yol vəziyyətini dərhal çəkir; dəyişiklik varsa vətəndaşları yenidən marşrutlaşdırır."""
     if await ctx.routing.sync_traffic():
         ctx.bus.publish("road_update", {"closures": ctx.routing.closures_list()}, channel="public")
-        return await evacuation.reevaluate_plans(ctx)
+        return await ctx.replan.request("traffic")
     return 0
 
 
@@ -135,7 +135,7 @@ async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: s
             return {"scenario": name, "error": "no_shelter"}
         updated = shelter_svc.update_shelter(ctx, target["id"], occupancy=math.ceil(target["capacity"] * 0.97))
         alert = crisis.evaluate_shelter(ctx, updated)
-        rerouted = await evacuation.reevaluate_plans(ctx)
+        rerouted = await ctx.replan.request("shelter_full")
         return {"scenario": name, "shelter": updated["name"], "occupancy_pct": updated["occupancy_pct"],
                 "alert_id": alert["id"] if alert else None, "rerouted": rerouted}
 
@@ -146,7 +146,7 @@ async def run(ctx: AppContext, name: str, district_id: str | None, shelter_id: s
             updated = shelter_svc.update_shelter(ctx, s["id"], delta=inc)
             crisis.evaluate_shelter(ctx, updated)
             changed += 1
-        rerouted = await evacuation.reevaluate_plans(ctx)
+        rerouted = await ctx.replan.request("crowd")
         return {"scenario": name, "shelters_changed": changed, "rerouted": rerouted}
 
     if name == "road_close":

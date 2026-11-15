@@ -91,7 +91,7 @@ async def shelter_update(shelter_id: str, body: ShelterUpdate, user: dict = Depe
     crisis.evaluate_shelter(ctx, updated)
     analytics.invalidate()
     if not updated["accepting"]:
-        await evacuation.reevaluate_plans(ctx)
+        await ctx.replan.request("shelter_full")
     return updated
 
 
@@ -126,8 +126,10 @@ async def road_close(edge_id: str, body: RoadCloseRequest, user: dict = Depends(
     ctx.db.audit(user["sub"], user["role"], "road_close", {"edge_id": edge_id, "reason": body.reason})
     ctx.bus.publish("road_update", {"closures": ctx.routing.closures_list()}, channel="public")
     analytics.invalidate()
-    rerouted = await evacuation.reevaluate_plans(ctx)
-    return {"ok": True, "edge_id": edge_id, "rerouted_citizens": rerouted}
+    rerouted = await ctx.replan.request("road_closed")
+    # Fon rejimində say sonradan `reroute_batch` hadisəsi ilə gəlir (None = planlaşdırılıb)
+    return {"ok": True, "edge_id": edge_id, "rerouted_citizens": rerouted,
+            "replan": "done" if rerouted is not None else "scheduled"}
 
 
 @router.post("/roads/{edge_id}/open")

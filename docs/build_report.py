@@ -309,6 +309,14 @@ SECTIONS: list[dict] = [
                 "Ehtiyat rejimi: xarici API cavab vermədikdə marşrut lokal Dijkstra ilə, yaddaşdakı qraf və son məlum "
                 "bağlı yollar əsasında qurulur. Vətəndaş xəta görmür; rejim interfeysdə göstərilir.",
             ]),
+            ("h2", "Hesablamanın sorğu yolundan çıxarılması"),
+            ("p", "Arxitektura analizindən sonra iki düzəliş edildi. Birincisi, CPU-ağır marşrut hesablaması event "
+                  "loop-dan işçi thread-lərə köçürüldü. İkincisi, vətəndaşların yenidən marşrutlaşdırılması HTTP "
+                  "sorğusunun içindən fon planlayıcısına çıxarıldı: sorğu dərhal cavab verir, ardıcıl dəyişikliklər bir "
+                  "hesablamada birləşdirilir, nəticə SSE ilə çatdırılır. Real şəhər miqyasında (4 900 qovşaq) \"yolu bağla\" "
+                  "sorğusunun cavab müddəti 981 ms-dən 12 ms-ə düşdü, digər sorğuların maksimal gecikməsi 106 ms-dən "
+                  "75 ms-ə endi. Paralellik dərəcəsi (1) ölçmə ilə seçilib: Python GIL səbəbindən daha çox thread "
+                  "gecikməni artırır."),
             ("h2", "Yük altında davranış"),
             ("bullets", [
                 "Marşrut keşi (20 s; yol vəziyyəti dəyişdikdə etibarsız olur) və toplu marşrut sorğusu.",
@@ -340,7 +348,7 @@ SECTIONS: list[dict] = [
                   "yolu verməyə və fon tapşırığını söndürməyə imkan verir, xarici API simulyatoru isə proses daxilində "
                   "işləyir — ona görə testlər şəbəkə və əlavə servis tələb etmir. İşə salma: python -m pytest -q. "
                   "Nəticələr README-də göstərilib."),
-            ("p", "Nəticə: 305 avtomatik test, hamısı uğurlu (≈8 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
+            ("p", "Nəticə: 313 avtomatik test, hamısı uğurlu (≈9 saniyə). Testlər tapşırığın sərhəd dəyərlərini dəqiq "
                   "yoxlayır: 3 və 4 fərqli SOS, eyni vətəndaşdan təkrar siqnal, 5 dəqiqəlik pəncərə, 500 m radius, "
                   "doluluğun dəqiq 95% və 95%-dən yuxarı olması, 90% marşrut həddi. Test yazılarkən 5 real qüsur "
                   "aşkarlandı və düzəldildi (faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi, vətəndaşın "

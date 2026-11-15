@@ -172,15 +172,18 @@ class RoutingService:
         except Exception:
             source = "fallback"
             self.fallback_calls += 1
-            closed = self.closed_edges
-            routes = [
-                self.graph.shortest_path(origin, d, closed, self.congestion, speed, profile).to_dict()
-                for d in destinations
-            ]
+            # CPU-ağır hesablama event loop-u bloklamasın (texniki borc E1)
+            routes = await asyncio.to_thread(self._local_routes, origin, destinations, speed, profile)
         if len(self._cache) > 5000:
             self._cache.clear()
         self._cache[key] = (time.time(), routes, source)
         return routes, source
+
+    def _local_routes(self, origin, destinations, speed: float, profile: str) -> list[dict]:
+        """Lokal Dijkstra (ehtiyat). Thread-də işləyir: qraf yalnız oxunur, vəziyyət lokal dəyişənlərdədir."""
+        closed = self.closed_edges
+        congestion = dict(self.congestion)
+        return [self.graph.shortest_path(origin, d, closed, congestion, speed, profile).to_dict() for d in destinations]
 
     # ----- Simulyasiya idarəsi (demo) -----
     async def sim(self, path: str, payload: dict | None = None) -> dict:

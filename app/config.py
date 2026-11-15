@@ -49,6 +49,7 @@ class Settings:
     breaker_reset_s = float(_env("UCE_BREAKER_RESET_S", "15"))
     traffic_sync_interval_s = float(_env("UCE_TRAFFIC_SYNC_S", "4"))
     route_cache_ttl_s = float(_env("UCE_ROUTE_CACHE_TTL_S", "20"))
+    replan_concurrency = int(_env("UCE_REPLAN_CONCURRENCY", "1"))   # fon yenidən marşrutlaşdırmanın paralelliyi (GIL: 1 ən yaxşı gecikmə)
 
 
 settings = Settings()

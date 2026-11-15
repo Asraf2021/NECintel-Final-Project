@@ -1,7 +1,9 @@
 """Təxliyə planı: ən yaxın toplanış məntəqələri, tövsiyə olunan marşrut və avtomatik yenidən marşrutlaşdırma."""
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import time
 
 from ..config import settings
@@ -10,6 +12,7 @@ from ..core.geo import haversine_m
 from ..core.roles import citizen_role, role_policy
 from . import forecast, shelters as shelter_svc
 
+log = logging.getLogger("uce.evacuation")
 CANDIDATES = 8  # marşrutu hesablanan ən yaxın məntəqə sayı
 
 
@@ -127,20 +130,37 @@ def _compare_and_store(ctx: AppContext, citizen_id: str, lat: float, lon: float,
     )
 
 
+
+
 async def reevaluate_plans(ctx: AppContext, max_plans: int = 500) -> int:
-    """Yol bağlandıqda / məntəqə 90% dolduqda təsirlənən vətəndaşlara avtomatik alternativ marşrut göndərir."""
+    """Yol bağlandıqda / məntəqə 90% dolduqda təsirlənən vətəndaşlara avtomatik alternativ marşrut göndərir.
+
+    Yalnız təsirlənən planlar yenidən qurulur, məhdud paralellik ilə (settings.replan_concurrency).
+    Python GIL səbəbindən CPU-ağır thread-lərin sayı artdıqca digər sorğuların gecikməsi də artır,
+    ona görə susmaya görə kiçik dəyər seçilib (ölçmə: README → Performans).
+    """
     closed = ctx.routing.closed_edges
     full = {s["id"] for s in shelter_svc.list_shelters(ctx, include_reserve=True) if not s["accepting"]}
     plans = ctx.db.query("SELECT * FROM evacuation_plans ORDER BY updated_at DESC LIMIT ?", (max_plans,))
-    sent = 0
-    for p in plans:
-        affected = p["shelter_id"] in full or bool(set(json.loads(p["edge_ids"])) & closed)
-        if not affected:
-            continue
-        plan = await build_plan(ctx, p["origin_lat"], p["origin_lon"], p["citizen_id"])
+    affected = [p for p in plans
+                if p["shelter_id"] in full or bool(set(json.loads(p["edge_ids"])) & closed)]
+    if not affected:
+        return 0
+    sem = asyncio.Semaphore(max(1, settings.replan_concurrency))
+
+    async def one(p: dict) -> bool:
+        async with sem:
+            plan = await build_plan(ctx, p["origin_lat"], p["origin_lon"], p["citizen_id"])
         if plan["rerouted"]:
             ctx.bus.publish("reroute", {"plan": plan}, citizen_id=p["citizen_id"])
-            sent += 1
+            return True
+        return False
+
+    results = await asyncio.gather(*(one(p) for p in affected), return_exceptions=True)
+    sent = sum(1 for r in results if r is True)
+    for r in results:
+        if isinstance(r, Exception):  # bir vətəndaşın xətası digərlərini dayandırmır
+            log.warning("replan for one citizen failed: %r", r)
     if sent:
         ctx.bus.publish("reroute_batch", {"count": sent}, channel="ops")
     return sent

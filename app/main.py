@@ -23,6 +23,7 @@ from .core.events import EventBus
 from .core.graph import RoadGraph
 from .routers import auth, citizen, dispatcher
 from .services import analytics, demo, evacuation
+from .services.replan import ReplanScheduler
 from .services.routing import RoutingService
 
 log = logging.getLogger("uce")
@@ -111,7 +112,7 @@ async def _traffic_loop(ctx: AppContext) -> None:
             if changed:
                 analytics.invalidate()
                 ctx.bus.publish("road_update", {"closures": ctx.routing.closures_list()}, channel="public")
-                await evacuation.reevaluate_plans(ctx)
+                await ctx.replan.request("traffic")
         except Exception:  # fon dövrü heç vaxt dayanmamalıdır
             log.exception("traffic sync failed")
         await asyncio.sleep(settings.traffic_sync_interval_s)
@@ -129,6 +130,9 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
         for row in db.query("SELECT * FROM road_closures WHERE source='dispatcher'"):
             routing.manual_closures[row["edge_id"]] = {"reason": row["reason"], "since": row["created_at"]}
         ctx = AppContext(db=db, bus=EventBus(), graph=graph, routing=routing, city=city)
+        # Fon rejimində yenidən marşrutlaşdırma sorğu yolundan çıxarılır; testlərdə (fon söndürülüb) sinxron qalır
+        ctx.replan = ReplanScheduler(ctx, inline=not start_background)
+        ctx.replan.start()
         app.state.ctx = ctx
         app.state.started_at = time.time()
         await routing.sync_traffic()
@@ -139,6 +143,7 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
             if task:
                 task.cancel()
             demo.stop_inflow(ctx)
+            await ctx.replan.stop()
             await client.aclose()
             db.close()
 
@@ -177,6 +182,7 @@ def create_app(db_path: str | None = None, start_background: bool = True) -> Fas
         return {"status": "ok", "version": settings.version,
                 "uptime_s": round(time.time() - request.app.state.started_at),
                 "routing": ctx.routing.status(),
+                "replan": ctx.replan.status(),
                 "events": {"clients": ctx.bus.subscriber_count, "published": ctx.bus.published, "dropped": ctx.bus.dropped}}
 
     # ----- Frontend (statik) -----

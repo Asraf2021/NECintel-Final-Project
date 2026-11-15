@@ -85,7 +85,7 @@ async def update_status(body: StatusUpdate, ctx: AppContext = Depends(get_ctx)):
     result = sos_svc.set_status(ctx, body.citizen_id, body.status, body.shelter_id, body.lat, body.lon)
     analytics.invalidate()
     if result["shelter"] and not result["shelter"]["accepting"]:
-        await evacuation.reevaluate_plans(ctx)  # məntəqə 90%-ə çatdı -> başqalarına alternativ
+        await ctx.replan.request("shelter_full")  # məntəqə 90%-ə çatdı -> başqalarına alternativ (fonda)
     return result
 
 

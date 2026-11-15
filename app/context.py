@@ -2,7 +2,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from fastapi import Request
 
@@ -20,6 +21,8 @@ class AppContext:
     graph: RoadGraph
     routing: RoutingService
     city: dict
+    replan: Any = field(default=None)       # ReplanScheduler (services/replan.py)
+    inflow_task: Any = field(default=None)  # demo: canlı insan axını
 
     @property
     def districts(self) -> list[dict]:

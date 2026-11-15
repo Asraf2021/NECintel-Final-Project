@@ -479,6 +479,26 @@ JWT (HS256) və müddətli tokenlər, PBKDF2-HMAC-SHA256 parol heşi, icazə əs
 
 ---
 
+### Texniki borc düzəlişləri: E1 və E2 (arxitektura analizindən sonra)
+
+Analiz iki performans riskini göstərdi; hər ikisi davranışı dəyişmədən düzəldildi:
+
+- **E1 — CPU-ağır marşrut hesablaması event loop-dan çıxarıldı.** Lokal ehtiyat Dijkstra `asyncio.to_thread` ilə işçi thread-də (`app/services/routing.py`), simulyasiya olunmuş Xarici API-nin marşrut endpoint-ləri sinxron (`def`) — FastAPI onları thread-pool-da işlədir (`external_api/main.py`).
+- **E2 — yenidən marşrutlaşdırma sorğu yolundan çıxarıldı.** `ReplanScheduler` (`app/services/replan.py`): "yolu bağla" / "məntəqə doldu" sorğusu yalnız siqnal verir və dərhal cavab qaytarır; fon işçisi siqnalları debounce ilə birləşdirir (10 siqnal → 1 hesablama), hesablama zamanı gələn dəyişikliyi itirmir, xətada dayanmır. Nəticə vətəndaşa SSE (`reroute`), dispetçerə `reroute_batch` ilə gedir. Vəziyyət: `GET /health` → `replan`. Testlərdə (fon söndürülüb) əvvəlki sinxron davranış saxlanılır.
+- **Məhdud paralellik:** `UCE_REPLAN_CONCURRENCY` (susmaya görə 1). Python GIL səbəbindən CPU-ağır thread sayını artırmaq hesablamanı sürətləndirmir, digər sorğuların gecikməsini artırır — dəyər ölçmə ilə seçilib.
+
+**Ölçmə** (yol bağlanması, 200 aktiv plan, eyni anda hər 20 ms digər sorğu):
+
+| Qraf | Versiya | "Yolu bağla" cavabı | Digər sorğuların maks. gecikməsi |
+|---|---|---|---|
+| Hazırkı (36 qovşaq) | əvvəl | 45 ms | 14 ms |
+| Hazırkı (36 qovşaq) | sonra | 8 ms | 13 ms |
+| Real şəhər miqyası (4 900 qovşaq, 9 660 seqment) | əvvəl | **981 ms** | 106 ms |
+| Real şəhər miqyası | sonra, paralellik 1 | **12 ms** | **75 ms** |
+| Real şəhər miqyası | sonra, paralellik 8 | 15 ms | 306 ms |
+
+Hazırkı kiçik qrafda fərq azdır (hesablama onsuz da ~30 ms-dir); düzəliş real xəritə miqyasında (OSM) həlledicidir. Növbəti addım (gələcək): marşrut hesablamasını ayrıca prosesə / OSRM-ə köçürmək.
+
 ## Testlər
 
 Test asılılıqlarını quraşdırın:
@@ -493,7 +513,7 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-**Nəticə (15.11.2026):** `305 passed in 8.46s` — 305 test, hamısı uğurlu.
+**Nəticə (15.11.2026):** `313 passed in 9.53s` — 313 test, hamısı uğurlu.
 
 | Fayl | Test | Nəyi yoxlayır |
 |---|---|---|
@@ -505,6 +525,7 @@ python -m pytest -q
 | `tests/test_resilience.py` | 17 | xarici API kəsintisində ehtiyat marşrut, circuit breaker, bərpa, kəsinti zamanı bağlı yolların nəzərə alınması |
 | `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
 | `tests/test_priority.py` | 48 | Drop 1: prioritet rol, Kritik Prioritet SOS, əlçatan marşrut, briqada seçimi, miqrasiya, i18n tamlığı |
+| `tests/test_replan.py` | 8 | Fon planlayıcısı: dərhal cavab, siqnalların birləşdirilməsi, hesablama zamanı gələn siqnal, xətaya davamlılıq; fallback Dijkstra event loop thread-ində işləmir; məhdud paralellik |
 | `tests/test_forecast.py` | 12 | Time-to-Capacity: sənəddəki nümunə (T90 = 30, T100 = 55 dəq), etibarlılıq, artım olmadıqda vaxt yoxdur, qabaqcadan yönləndirmə |
 
 Testlər sərhəd dəyərlərini dəqiq yoxlayır. Test yazılarkən 5 real qüsur aşkarlandı və düzəldildi: faiz hədlərinin yuvarlaqlaşdırılmış dəyərlə müqayisəsi (məs. 95,02% → 95,0 → həyəcan yaranmırdı), bir vətəndaşın məntəqədə iki dəfə sayılması, rayon sərhədindəki 500 m-lik klaster üçün ikinci həyəcan, 413 cavabında təhlükəsizlik başlıqlarının olmaması, chunked gövdədə ölçü həddinin yoxlanmaması.

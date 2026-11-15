@@ -101,14 +101,15 @@ def create_external_app() -> FastAPI:
             "congestion": state["congestion"],
         }
 
+    # Sinxron (def) endpoint-lər: FastAPI onları thread-pool-da işlədir — CPU-ağır Dijkstra event loop-u bloklamır
     @app.get("/v1/route")
-    async def route(from_lat: float, from_lon: float, to_lat: float, to_lon: float,
+    def route(from_lat: float, from_lon: float, to_lat: float, to_lon: float,
                     avoid: str = "", speed_kmh: float = 4.5, profile: str = "foot"):
         return _route(Point(lat=from_lat, lon=from_lon), Point(lat=to_lat, lon=to_lon),
                       [a for a in avoid.split(",") if a], speed_kmh, profile)
 
     @app.post("/v1/routes/batch")
-    async def routes_batch(req: BatchRouteRequest):
+    def routes_batch(req: BatchRouteRequest):
         return {"routes": [_route(req.origin, d, req.avoid, req.speed_kmh, req.profile) for d in req.destinations]}
 
     # ----- Simulyasiya idarəsi (real provayderdə olmur) -----
