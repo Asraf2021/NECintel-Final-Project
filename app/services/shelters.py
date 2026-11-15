@@ -57,7 +57,8 @@ def update_shelter(ctx: AppContext, shelter_id: str, occupancy: int | None = Non
             ctx.db.execute("INSERT INTO shelter_occupancy_log (shelter_id, ts, occupancy) VALUES (?,?,?)",
                            (shelter_id, time.time(), new_occ))
     updated = get_shelter(ctx, shelter_id)
-    from . import forecast
+    from . import crisis, forecast
     forecast.attach(ctx, [updated])
+    crisis.resolve_shelter_if_below(ctx, updated)
     ctx.bus.publish("shelter_update", {"shelter": updated}, channel="public")
     return updated

@@ -100,9 +100,44 @@ def evaluate_sos_cluster(ctx: AppContext, sos: dict) -> dict | None:
     return alert
 
 
+def _new_crossing_since_decision(ctx: AppContext, shelter: dict) -> bool:
+    """Son qərardan sonra doluluq 95%-dən aşağı düşüb yenidən qalxıbsa — bu YENİ keçiddir, həyəcan lazımdır.
+
+    Qərardan sonra məntəqə hələ də 95%-dən yuxarıdadırsa (aşağı düşməyib) — təkrar həyəcan (spam) yaradılmır.
+    """
+    last = ctx.db.one(
+        "SELECT status, decided_at FROM alerts WHERE kind='shelter_overflow' AND shelter_id=? AND status!='pending'"
+        " ORDER BY decided_at DESC LIMIT 1", (shelter["id"],))
+    if not last:
+        return True
+    if last["status"] == "auto_resolved":   # doluluq aşağı düşdüyü üçün avtomatik bağlanıb -> indiki keçid yenidir
+        return True
+    limit = settings.shelter_critical_pct * shelter["capacity"]
+    return ctx.db.scalar(
+        "SELECT COUNT(*) FROM shelter_occupancy_log WHERE shelter_id=? AND ts>=? AND occupancy*100.0<=?",
+        (shelter["id"], last["decided_at"], limit)) > 0
+
+
+def resolve_shelter_if_below(ctx: AppContext, shelter: dict) -> dict | None:
+    """Doluluq 95%-dən aşağı düşəndə həmin məntəqənin gözləyən həyəcanı avtomatik bağlanır."""
+    if shelter.get("over_critical"):
+        return None
+    with ctx.db.transaction():
+        pending = ctx.db.one(
+            "SELECT * FROM alerts WHERE kind='shelter_overflow' AND shelter_id=? AND status='pending'", (shelter["id"],))
+        if not pending:
+            return None
+        ctx.db.execute("UPDATE alerts SET status='auto_resolved', decided_at=?, decided_by='system' WHERE id=?",
+                       (time.time(), pending["id"]))
+    alert = _alert_out(ctx.db.one("SELECT * FROM alerts WHERE id=?", (pending["id"],)), ctx)
+    ctx.bus.publish("alert_update", {"alert": alert}, channel="ops")
+    return alert
+
+
 def evaluate_shelter(ctx: AppContext, shelter: dict) -> dict | None:
-    """Qayda B. Doluluq dəyişəndə çağırılır."""
+    """Qayda B. Doluluq dəyişəndə çağırılır. Hər yeni 95%-i aşma keçidi üçün ayrıca həyəcan."""
     if shelter["status"] != "open" or not shelter["over_critical"]:
+        resolve_shelter_if_below(ctx, shelter)
         return None
     details = {"trigger": "occupancy", "occupancy_pct": shelter["occupancy_pct"],
                "occupancy": shelter["occupancy"], "capacity": shelter["capacity"],
@@ -115,7 +150,7 @@ def evaluate_shelter(ctx: AppContext, shelter: dict) -> dict | None:
             ctx.db.execute("UPDATE alerts SET details=? WHERE id=?", (json.dumps(details, ensure_ascii=False), pending["id"]))
             alert_id, event = pending["id"], "alert_update"
         else:
-            if _recent_decision(ctx, "shelter_overflow", "shelter_id", shelter["id"]):
+            if not _new_crossing_since_decision(ctx, shelter):
                 return None
             cur = ctx.db.execute(
                 "INSERT INTO alerts (kind,level,district_id,shelter_id,lat,lon,details,created_at)"
@@ -189,6 +224,23 @@ def confirm_alert(ctx: AppContext, alert_id: int, actor: dict) -> dict | None:
         ctx.bus.publish("shelter_update", {"shelter": shelter_svc.get_shelter(ctx, opened_shelter), "opened": True},
                         channel="public")
     return result
+
+
+def dismiss_all(ctx: AppContext, actor: dict, kind: str | None = None) -> list[int]:
+    """Bütün gözləyən həyəcanları bir kliklə bağlamaq ("Hamısını bağla"). Hər biri audit jurnalına yazılır."""
+    now = time.time()
+    with ctx.db.transaction():
+        sql = "SELECT id FROM alerts WHERE status='pending'" + (" AND kind=?" if kind else "")
+        ids = [r["id"] for r in ctx.db.query(sql, (kind,) if kind else ())]
+        for alert_id in ids:
+            ctx.db.execute("UPDATE alerts SET status='dismissed', decided_at=?, decided_by=? WHERE id=?",
+                           (now, actor["sub"], alert_id))
+        if ids:
+            ctx.db.audit(actor["sub"], actor["role"], "alert_dismiss_all", {"alert_ids": ids, "kind": kind})
+    for alert_id in ids:
+        ctx.bus.publish("alert_update", {"alert": _alert_out(ctx.db.one("SELECT * FROM alerts WHERE id=?", (alert_id,)), ctx)},
+                        channel="ops")
+    return ids
 
 
 def dismiss_alert(ctx: AppContext, alert_id: int, actor: dict) -> dict | None:

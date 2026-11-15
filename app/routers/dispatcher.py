@@ -71,6 +71,15 @@ def alert_confirm(alert_id: int, user: dict = Depends(require("alert:decide")), 
     return result
 
 
+@router.post("/alerts/dismiss-all")
+def alerts_dismiss_all(kind: str | None = Query(default=None, pattern="^(sos_cluster|shelter_overflow)$"),
+                       user: dict = Depends(require("alert:decide")), ctx: AppContext = Depends(get_ctx)):
+    """Bütün gözləyən həyəcanları bir kliklə bağlamaq ("Hamısını bağla")."""
+    ids = crisis.dismiss_all(ctx, user, kind)
+    analytics.invalidate()
+    return {"dismissed": len(ids), "alert_ids": ids}
+
+
 @router.post("/alerts/{alert_id}/dismiss")
 def alert_dismiss(alert_id: int, user: dict = Depends(require("alert:decide")), ctx: AppContext = Depends(get_ctx)):
     result = crisis.dismiss_alert(ctx, alert_id, user)

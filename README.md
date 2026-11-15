@@ -191,6 +191,8 @@ Təhlükəsizlik prinsipi (araşdırma, bölmə 5.2): sistem qərarı özü icra
 9. **"Sıfırla".** Bütün məlumat ilkin vəziyyətə qaytarılır, bağlı yollar açılır.
 
 > Təsdiqdən sonra eyni rayon üçün 5 dəqiqə ərzində yeni SOS-klaster həyəcanı yaradılmır (cooldown). Ssenarini təkrar göstərmək üçün başqa rayon seçin və ya "Sıfırla" əməliyyatından istifadə edin.
+>
+> **Doluluq həyəcanı hər yeni keçiddə gəlir:** məntəqə 95%-dən aşağı düşüb yenidən aşdıqda (qərardan dərhal sonra belə) yeni "Qırmızı Həyəcan" yaranır; məntəqə 95%-dən yuxarı qaldıqca təkrar həyəcan (spam) olmur. Qərar verilməmiş həyəcan doluluq 95%-dən aşağı düşəndə avtomatik bağlanır ("Avtomatik bağlandı"). Bir neçə həyəcan gözləyəndə zolaqda və "Həyəcanlar" panelində **"Hamısını bağla (N)"** düyməsi var (`POST /api/v1/dispatch/alerts/dismiss-all`, audit jurnalına yazılır).
 
 ---
 
@@ -552,7 +554,7 @@ Avtomatik testlər (pytest):
 python -m pytest -q
 ```
 
-**Nəticə (15.11.2026):** `381 passed in 22.21s` — 381 test, hamısı uğurlu.
+**Nəticə (15.11.2026):** `390 passed in 25.28s` — 390 test, hamısı uğurlu.
 
 | Fayl | Test | Nəyi yoxlayır |
 |---|---|---|
@@ -565,6 +567,7 @@ python -m pytest -q
 | `tests/test_events.py` | 6 | SSE kanalları (public / ops / fərdi vətəndaş), dolu növbədə bloklanmama |
 | `tests/test_priority.py` | 48 | Drop 1: prioritet rol, Kritik Prioritet SOS, əlçatan marşrut, briqada seçimi, miqrasiya, i18n tamlığı |
 | `tests/test_mygov.py` | 57 | myGov ilə qeydiyyat: OAuth2 + PKCE axını, popup / təsdiq, arayış nömrəsinin myGov reyestrində yoxlanması (başqasının / uydurma / müddəti bitmiş), fayl yükləmə, fayl yoxlamaları, başqasının adından əməliyyatın qarşısı, dispetçer yoxlaması |
+| `tests/test_alert_rearm.py` | 9 | Hər 95% keçidində yeni həyəcan, 95%-dən aşağıda avtomatik bağlanma, spam yoxdur, "Hamısını bağla" |
 | `tests/test_drop2_outage.py` | 11 | Drop 2: 503 və > 5 s timeout, breaker, 3 ehtiyat səviyyəsi, 500 yoxdur, bərpa |
 | `tests/test_replan.py` | 8 | Fon planlayıcısı: dərhal cavab, siqnalların birləşdirilməsi, hesablama zamanı gələn siqnal, xətaya davamlılıq; fallback Dijkstra event loop thread-ində işləmir; məhdud paralellik |
 | `tests/test_forecast.py` | 12 | Time-to-Capacity: sənəddəki nümunə (T90 = 30, T100 = 55 dəq), etibarlılıq, artım olmadıqda vaxt yoxdur, qabaqcadan yönləndirmə |

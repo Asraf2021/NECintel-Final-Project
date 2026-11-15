@@ -222,3 +222,4 @@
 .d-chip.is-bad { animation: chip-blink 1.6s ease-in-out infinite; }
 @keyframes chip-blink { 50% { background: #5A3A08; } }
 .chip-sub { display: block; font-weight: 500; font-size: 11px; opacity: .85; }
+.alert-banner .btn-dismiss-all { background: rgba(0,0,0,.18); }

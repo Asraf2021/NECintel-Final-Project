@@ -226,7 +226,8 @@
     $("alertStrip").innerHTML = '<div class="alert-banner" role="alert"><span class="a-ico">' + ICON.alert + '</span><div><div class="a-head">' +
       esc(t("d.alert.headline")) + more + '</div><div class="a-act">' + esc(t("d.alert.action")) + '</div><div class="a-what">' + esc(alertText(a)) +
       '</div></div><div class="a-btns">' + (decide ? '<button class="btn btn-confirm" type="button" data-confirm="' + a.id + '">' + ICON.check + "<span>" + esc(t("d.alert.confirm")) +
-      '</span></button><button class="btn btn-dismiss" type="button" data-dismiss="' + a.id + '">' + esc(t("d.alert.dismiss")) + "</button>" : "") + "</div></div>";
+      '</span></button><button class="btn btn-dismiss" type="button" data-dismiss="' + a.id + '">' + esc(t("d.alert.dismiss")) + "</button>" +
+      (pending.length > 1 ? '<button class="btn btn-dismiss btn-dismiss-all" type="button" data-dismiss-all="1">' + esc(t("d.alert.dismiss_all", { n: pending.length })) + "</button>" : "") : "") + "</div></div>";
   }
 
   function kpi(icon, label, value, sub, color, alarm, bar) {
@@ -279,11 +280,16 @@
 
   function renderAlerts() {
     const list = state.data.alerts.slice(0, 20);
+    const pendingN = state.data.alerts.filter((a) => a.status === "pending").length;
+    $("alertsAllBtn").hidden = !(pendingN > 1 && can("alert:decide"));
+    $("alertsAllBtn").textContent = t("d.alert.dismiss_all", { n: pendingN });
     if (!list.length) { $("alertList").innerHTML = '<div class="d-empty">' + esc(t("d.alerts.empty")) + "</div>"; return; }
     const decide = can("alert:decide");
     $("alertList").innerHTML = list.map((a) => {
       const st = a.status === "pending" ? '<span class="tag red">' + esc(t("d.alert.pending")) + "</span>"
-        : a.status === "confirmed" ? '<span class="tag green">' + esc(t("d.alert.confirmed")) + "</span>" : '<span class="tag">' + esc(t("d.alert.dismissed")) + "</span>";
+        : a.status === "confirmed" ? '<span class="tag green">' + esc(t("d.alert.confirmed")) + "</span>"
+          : a.status === "auto_resolved" ? '<span class="tag blue">' + esc(t("d.alert.auto_resolved")) + "</span>"
+            : '<span class="tag">' + esc(t("d.alert.dismissed")) + "</span>";
       let body = "";
       if (a.status === "pending" && decide) {
         body = '<div class="sos-btns"><button class="btn-xs danger" type="button" data-confirm="' + a.id + '">' + esc(t("d.alert.confirm")) +
@@ -485,6 +491,10 @@
           toast([ac.brigade ? t("d.alert.done_brigade", { name: ac.brigade.name, dist: fmtDist(ac.brigade.distance_m) }) : t("d.alert.no_brigade"),
             ac.new_shelter ? t("d.alert.done_shelter", { name: ac.new_shelter.name, cap: fmtNum(ac.new_shelter.capacity) }) : t("d.alert.no_shelter")].join(" · "), "success");
         }
+      } else if (ds.dismissAll) {
+        el.disabled = true;
+        const res = await action(() => call("/dispatch/alerts/dismiss-all", { method: "POST" }));
+        if (res) toast(t("d.toast.dismissed_all", { n: res.dismissed }), "success");
       } else if (ds.vview) viewCertificate(ds.vview);
       else if (ds.vdecide) action(() => call("/dispatch/verifications/" + encodeURIComponent(ds.vid) + "/" + ds.vdecide, { method: "POST" }), t("d.toast.done"));
       else if (ds.dismiss) action(() => call("/dispatch/alerts/" + ds.dismiss + "/dismiss", { method: "POST" }));
